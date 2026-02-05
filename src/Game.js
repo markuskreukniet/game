@@ -9,11 +9,13 @@ function createPxSize(size) {
 }
 
 export default function game(parent) {
+  const SECOND_IN_MS = 1000;
+
   const width = 800;
   const height = 600;
   const dpr = window.devicePixelRatio || 1;
   const fps = 30;
-  const targetFrameTime = 1000 / fps;
+  const targetFrameTime = SECOND_IN_MS / fps;
   const speed = 100; // px/s
 
   let lastTime = 0;
@@ -38,7 +40,7 @@ export default function game(parent) {
   }
 
   function fillSquare(x, y, size, r, g, b, a) {
-    // TODO: is it more efficient to check if dpr is 1 and skip the is Math.floor?
+    // x/y may be fractional → integer pixels
     const startX = Math.floor(x * dpr);
     const startY = Math.floor(y * dpr);
     const endX = Math.floor((x + size) * dpr);
@@ -63,7 +65,7 @@ export default function game(parent) {
     const elapsedMs = time - lastTime;
     if (elapsedMs >= targetFrameTime) {
       lastTime = time;
-      const deltaTime = elapsedMs / 1000;
+      const deltaTime = elapsedMs / SECOND_IN_MS;
 
       data.fill(0);
       renderSquare(positionX, 0);
