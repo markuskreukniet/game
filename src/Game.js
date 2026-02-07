@@ -21,6 +21,7 @@ export default function game(parent) {
 
   let lastTime = 0;
   let velocityX = speed;
+  let positionX = 0;
 
   let inputLeft = false;
   let inputRight = false;
@@ -32,7 +33,6 @@ export default function game(parent) {
   canvas.height = height * dpr;
 
   const context = canvas.getContext("2d");
-
   const imageData = context.createImageData(canvas.width, canvas.height);
   const data = imageData.data;
 
@@ -61,39 +61,44 @@ export default function game(parent) {
 
   function renderSquare(x, y) {
     fillSquare(x, y, squareSize, 50, 50, 50, 255);
-    context.putImageData(imageData, 0, 0);
   }
 
   function reverseVelocityX() {
     velocityX = -velocityX;
   }
 
-  let positionX = 0;
+  function update(deltaTime) {
+    if (inputLeft && !inputRight) {
+      velocityX = -speed;
+    } else if (inputRight && !inputLeft) {
+      velocityX = speed;
+    }
+
+    positionX += velocityX * deltaTime;
+
+    if (positionX <= 0) {
+      positionX = 0;
+      reverseVelocityX();
+    } else if (positionX + squareSize >= width) {
+      positionX = width - squareSize;
+      reverseVelocityX();
+    }
+  }
+
+  function render() {
+    data.fill(0);
+    renderSquare(positionX, 0);
+    context.putImageData(imageData, 0, 0);
+  }
 
   function loop(time) {
     const elapsedMs = time - lastTime;
+
     if (elapsedMs >= targetFrameTime) {
       lastTime = time;
-      const deltaTime = elapsedMs / SECOND_IN_MS;
 
-      if (inputLeft && !inputRight) {
-        velocityX = -speed;
-      } else if (!inputLeft && inputRight) {
-        velocityX = speed;
-      }
-
-      positionX += velocityX * deltaTime;
-
-      if (positionX <= 0) {
-        positionX = 0;
-        reverseVelocityX();
-      } else if (positionX + squareSize >= width) {
-        positionX = width - squareSize;
-        reverseVelocityX();
-      }
-
-      data.fill(0);
-      renderSquare(positionX, 0);
+      update(elapsedMs / SECOND_IN_MS);
+      render();
     }
 
     requestAnimationFrameLoop();
