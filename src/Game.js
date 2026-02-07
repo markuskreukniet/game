@@ -17,8 +17,10 @@ export default function game(parent) {
   const fps = 30;
   const targetFrameTime = SECOND_IN_MS / fps;
   const speed = 100; // px/s
+  const squareSize = 50;
 
   let lastTime = 0;
+  let velocityX = speed;
 
   const canvas = createElement("canvas", parent);
   canvas.style.width = createPxSize(width);
@@ -55,8 +57,12 @@ export default function game(parent) {
   }
 
   function renderSquare(x, y) {
-    fillSquare(x, y, 50, 50, 50, 50, 255);
+    fillSquare(x, y, squareSize, 50, 50, 50, 255);
     context.putImageData(imageData, 0, 0);
+  }
+
+  function reverseVelocityX() {
+    velocityX = -velocityX;
   }
 
   let positionX = 0;
@@ -70,7 +76,15 @@ export default function game(parent) {
       data.fill(0);
       renderSquare(positionX, 0);
 
-      positionX += speed * deltaTime;
+      positionX += velocityX * deltaTime;
+
+      if (positionX <= 0) {
+        positionX = 0;
+        reverseVelocityX();
+      } else if (positionX + squareSize >= width) {
+        positionX = width - squareSize;
+        reverseVelocityX();
+      }
     }
 
     requestAnimationFrameLoop();
