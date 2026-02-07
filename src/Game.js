@@ -22,6 +22,9 @@ export default function game(parent) {
   let lastTime = 0;
   let velocityX = speed;
 
+  let inputLeft = false;
+  let inputRight = false;
+
   const canvas = createElement("canvas", parent);
   canvas.style.width = createPxSize(width);
   canvas.style.height = createPxSize(height);
@@ -73,8 +76,11 @@ export default function game(parent) {
       lastTime = time;
       const deltaTime = elapsedMs / SECOND_IN_MS;
 
-      data.fill(0);
-      renderSquare(positionX, 0);
+      if (inputLeft && !inputRight) {
+        velocityX = -speed;
+      } else if (!inputLeft && inputRight) {
+        velocityX = speed;
+      }
 
       positionX += velocityX * deltaTime;
 
@@ -85,6 +91,9 @@ export default function game(parent) {
         positionX = width - squareSize;
         reverseVelocityX();
       }
+
+      data.fill(0);
+      renderSquare(positionX, 0);
     }
 
     requestAnimationFrameLoop();
@@ -95,4 +104,17 @@ export default function game(parent) {
   }
 
   requestAnimationFrameLoop();
+
+  const arrowLeft = "ArrowLeft";
+  const arrowRight = "ArrowRight";
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === arrowLeft) inputLeft = true;
+    if (e.key === arrowRight) inputRight = true;
+  });
+
+  document.addEventListener("keyup", (e) => {
+    if (e.key === arrowLeft) inputLeft = false;
+    if (e.key === arrowRight) inputRight = false;
+  });
 }
