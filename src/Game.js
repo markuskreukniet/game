@@ -5,24 +5,37 @@ function createElement(element, parent) {
 }
 
 function createPxSize(size) {
-  return `${size}${"px"}`;
+  return `${size}px`;
+}
+
+function createWorld() {
+  return {
+    width: 800,
+    height: 600,
+    entities: [
+      {
+        type: "player",
+        x: 0,
+        y: 0,
+        size: 50,
+        vx: 0,
+      },
+    ],
+  };
 }
 
 export default function game(parent) {
   const SECOND_IN_MS = 1000;
 
-  const width = 800;
-  const height = 600;
   const fps = 30;
   const targetFrameTime = SECOND_IN_MS / fps;
   const speed = 100; // px/s
-  const squareSize = 50;
+
+  const world = createWorld();
 
   let dpr = 1;
   let lastDpr = dpr;
   let lastTime = 0;
-  let velocityX = speed;
-  let positionX = 0;
 
   let inputLeft = false;
   let inputRight = false;
@@ -57,34 +70,34 @@ export default function game(parent) {
   }
 
   function renderSquare(x, y) {
-    fillSquare(x, y, squareSize, 50, 50, 50, 255);
+    fillSquare(x, y, world.entities[0].size, 50, 50, 50, 255);
   }
 
   function reverseVelocityX() {
-    velocityX = -velocityX;
+    world.entities[0].vx = -world.entities[0].vx;
   }
 
   function update(deltaTime) {
     if (inputLeft && !inputRight) {
-      velocityX = -speed;
+      world.entities[0].vx = -speed;
     } else if (inputRight && !inputLeft) {
-      velocityX = speed;
+      world.entities[0].vx = speed;
     }
 
-    positionX += velocityX * deltaTime;
+    world.entities[0].x += world.entities[0].vx * deltaTime;
 
-    if (positionX <= 0) {
-      positionX = 0;
+    if (world.entities[0].x <= 0) {
+      world.entities[0].x = 0;
       reverseVelocityX();
-    } else if (positionX + squareSize >= width) {
-      positionX = width - squareSize;
+    } else if (world.entities[0].x + world.entities[0].size >= world.width) {
+      world.entities[0].x = world.width - world.entities[0].size;
       reverseVelocityX();
     }
   }
 
   function render() {
     data.fill(0);
-    renderSquare(positionX, 0);
+    renderSquare(world.entities[0].x, world.entities[0].y);
     context.putImageData(imageData, 0, 0);
   }
 
@@ -112,11 +125,11 @@ export default function game(parent) {
   }
 
   function resizeCanvas() {
-    canvas.style.width = createPxSize(width);
-    canvas.style.height = createPxSize(height);
+    canvas.style.width = createPxSize(world.width);
+    canvas.style.height = createPxSize(world.height);
 
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
+    canvas.width = Math.floor(world.width * dpr);
+    canvas.height = Math.floor(world.height * dpr);
 
     imageData = context.createImageData(canvas.width, canvas.height);
     data = imageData.data;
