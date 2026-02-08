@@ -13,12 +13,13 @@ export default function game(parent) {
 
   const width = 800;
   const height = 600;
-  const dpr = window.devicePixelRatio || 1;
   const fps = 30;
   const targetFrameTime = SECOND_IN_MS / fps;
   const speed = 100; // px/s
   const squareSize = 50;
 
+  let dpr = 1;
+  let lastDpr = dpr;
   let lastTime = 0;
   let velocityX = speed;
   let positionX = 0;
@@ -27,14 +28,10 @@ export default function game(parent) {
   let inputRight = false;
 
   const canvas = createElement("canvas", parent);
-  canvas.style.width = createPxSize(width);
-  canvas.style.height = createPxSize(height);
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
-
   const context = canvas.getContext("2d");
-  const imageData = context.createImageData(canvas.width, canvas.height);
-  const data = imageData.data;
+
+  let imageData;
+  let data;
 
   function setPixel(x, y, r, g, b, a) {
     const index = (y * canvas.width + x) * 4;
@@ -92,6 +89,12 @@ export default function game(parent) {
   }
 
   function loop(time) {
+    dpr = window.devicePixelRatio || 1;
+    if (dpr !== lastDpr) {
+      lastDpr = dpr;
+      resizeCanvas();
+    }
+
     const elapsedMs = time - lastTime;
 
     if (elapsedMs >= targetFrameTime) {
@@ -108,7 +111,21 @@ export default function game(parent) {
     requestAnimationFrame(loop);
   }
 
+  function resizeCanvas() {
+    canvas.style.width = createPxSize(width);
+    canvas.style.height = createPxSize(height);
+
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+
+    imageData = context.createImageData(canvas.width, canvas.height);
+    data = imageData.data;
+  }
+
+  resizeCanvas();
   requestAnimationFrameLoop();
+
+  window.addEventListener("resize", resizeCanvas); // resize independent of main loop
 
   const arrowLeft = "ArrowLeft";
   const arrowRight = "ArrowRight";
