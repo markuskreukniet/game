@@ -24,6 +24,28 @@ function createWorld() {
   };
 }
 
+function createInputSystem() {
+  const arrowLeft = "ArrowLeft";
+  const arrowRight = "ArrowRight";
+
+  const input = {
+    left: false,
+    right: false,
+  };
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === arrowLeft) input.left = true;
+    if (e.key === arrowRight) input.right = true;
+  });
+
+  document.addEventListener("keyup", (e) => {
+    if (e.key === arrowLeft) input.left = false;
+    if (e.key === arrowRight) input.right = false;
+  });
+
+  return { input };
+}
+
 export default function game(parent) {
   const SECOND_IN_MS = 1000;
 
@@ -33,12 +55,11 @@ export default function game(parent) {
 
   const world = createWorld();
 
+  const inputSystem = createInputSystem();
+
   let dpr = 1;
   let lastDpr = dpr;
   let lastTime = 0;
-
-  let inputLeft = false;
-  let inputRight = false;
 
   const canvas = createElement("canvas", parent);
   const context = canvas.getContext("2d");
@@ -78,9 +99,9 @@ export default function game(parent) {
   }
 
   function update(deltaTime) {
-    if (inputLeft && !inputRight) {
+    if (inputSystem.input.left && !inputSystem.input.right) {
       world.entities[0].vx = -speed;
-    } else if (inputRight && !inputLeft) {
+    } else if (inputSystem.input.right && !inputSystem.input.left) {
       world.entities[0].vx = speed;
     }
 
@@ -139,17 +160,4 @@ export default function game(parent) {
   requestAnimationFrameLoop();
 
   window.addEventListener("resize", resizeCanvas); // resize independent of main loop
-
-  const arrowLeft = "ArrowLeft";
-  const arrowRight = "ArrowRight";
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === arrowLeft) inputLeft = true;
-    if (e.key === arrowRight) inputRight = true;
-  });
-
-  document.addEventListener("keyup", (e) => {
-    if (e.key === arrowLeft) inputLeft = false;
-    if (e.key === arrowRight) inputRight = false;
-  });
 }
