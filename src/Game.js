@@ -24,34 +24,88 @@ function createWorld() {
   };
 }
 
-export default function game(parent) {
-  const SECOND_IN_MS = 1000;
+function createInputSystem() {
+  const arrowLeft = "ArrowLeft";
+  const arrowRight = "ArrowRight";
 
-  const fps = 30;
-  const targetFrameTime = SECOND_IN_MS / fps;
-  const speed = 100; // px/s
+  const input = {
+    left: false,
+    right: false,
+  };
 
-  const world = createWorld();
+  document.addEventListener("keydown", (e) => {
+    if (e.key === arrowLeft) input.left = true;
+    if (e.key === arrowRight) input.right = true;
+  });
 
-  let dpr = 1;
+  document.addEventListener("keyup", (e) => {
+    if (e.key === arrowLeft) input.left = false;
+    if (e.key === arrowRight) input.right = false;
+  });
+
+  return { input };
+}
+
+function createMovementSystem(speed) {
+  return {
+    update(world, input, dt) {
+      for (const e of world.entities) {
+        if (e.type === "player") {
+          if (input.left && !input.right) e.vx = -speed;
+          else if (input.right && !input.left) e.vx = speed;
+          else e.vx = 0; // TODO: duplicate three times
+
+          e.x += e.vx * dt;
+        }
+      }
+    },
+  };
+}
+
+function createCollisionSystem() {
+  return {
+    update(world) {
+      for (const e of world.entities) {
+        if (e.x < 0) {
+          e.x = 0;
+          e.vx = 0;
+        } else if (e.x + e.size > world.width) {
+          e.x = world.width - e.size;
+          e.vx = 0;
+        }
+      }
+    },
+  };
+}
+
+function createRenderer(canvas, context, world) {
+  let dpr = 0;
   let lastDpr = dpr;
-  let lastTime = 0;
-
-  let inputLeft = false;
-  let inputRight = false;
-
-  const canvas = createElement("canvas", parent);
-  const context = canvas.getContext("2d");
-
   let imageData;
   let data;
 
+  function resize() {
+    dpr = window.devicePixelRatio;
+    if (dpr !== lastDpr) {
+      lastDpr = dpr;
+
+      canvas.style.width = createPxSize(world.width);
+      canvas.style.height = createPxSize(world.height);
+
+      canvas.width = Math.floor(world.width * dpr);
+      canvas.height = Math.floor(world.height * dpr);
+
+      imageData = context.createImageData(canvas.width, canvas.height);
+      data = imageData.data;
+    }
+  }
+
   function setPixel(x, y, r, g, b, a) {
-    const index = (y * canvas.width + x) * 4;
-    data[index] = r;
-    data[index + 1] = g;
-    data[index + 2] = b;
-    data[index + 3] = a;
+    const i = (y * canvas.width + x) * 4;
+    data[i] = r;
+    data[i + 1] = g;
+    data[i + 2] = b;
+    data[i + 3] = a;
   }
 
   function fillSquare(x, y, size, r, g, b, a) {
@@ -69,52 +123,67 @@ export default function game(parent) {
     }
   }
 
-  function renderSquare(x, y) {
-    fillSquare(x, y, world.entities[0].size, 50, 50, 50, 255);
-  }
-
-  function reverseVelocityX() {
-    world.entities[0].vx = -world.entities[0].vx;
-  }
-
-  function update(deltaTime) {
-    if (inputLeft && !inputRight) {
-      world.entities[0].vx = -speed;
-    } else if (inputRight && !inputLeft) {
-      world.entities[0].vx = speed;
-    }
-
-    world.entities[0].x += world.entities[0].vx * deltaTime;
-
-    if (world.entities[0].x <= 0) {
-      world.entities[0].x = 0;
-      reverseVelocityX();
-    } else if (world.entities[0].x + world.entities[0].size >= world.width) {
-      world.entities[0].x = world.width - world.entities[0].size;
-      reverseVelocityX();
-    }
-  }
-
-  function render() {
+  function clear() {
     data.fill(0);
-    renderSquare(world.entities[0].x, world.entities[0].y);
+  }
+
+  function present() {
     context.putImageData(imageData, 0, 0);
   }
 
+  resize();
+  window.addEventListener("resize", resize); // resize independent of main loop
+
+  return {
+    clear,
+    fillSquare,
+    present,
+  };
+}
+
+function createRenderSystem(renderer) {
+  return {
+    render(world) {
+      renderer.clear();
+
+      for (const e of world.entities) {
+        renderer.fillSquare(e.x, e.y, e.size, 50, 50, 50, 255);
+      }
+
+      renderer.present();
+    },
+  };
+}
+
+export default function game(parent) {
+  const SECOND_IN_MS = 1000;
+
+  const fps = 30;
+  const targetFrameTime = SECOND_IN_MS / fps;
+  const speed = 100; // px/s
+
+  const canvas = createElement("canvas", parent);
+  const context = canvas.getContext("2d");
+
+  const world = createWorld();
+
+  const inputSystem = createInputSystem();
+  const movementSystem = createMovementSystem(speed);
+  const collisionSystem = createCollisionSystem();
+  const renderer = createRenderer(canvas, context, world);
+  const renderSystem = createRenderSystem(renderer);
+
+  let lastTime = 0;
+
   function loop(time) {
-    dpr = window.devicePixelRatio || 1;
-    if (dpr !== lastDpr) {
-      lastDpr = dpr;
-      resizeCanvas();
-    }
+    const frameTime = time - lastTime;
 
-    const elapsedMs = time - lastTime;
-
-    if (elapsedMs >= targetFrameTime) {
+    if (frameTime >= targetFrameTime) {
       lastTime = time;
 
-      update(elapsedMs / SECOND_IN_MS);
-      render();
+      movementSystem.update(world, inputSystem.input, frameTime / SECOND_IN_MS);
+      collisionSystem.update(world);
+      renderSystem.render(world);
     }
 
     requestAnimationFrameLoop();
@@ -124,32 +193,11 @@ export default function game(parent) {
     requestAnimationFrame(loop);
   }
 
-  function resizeCanvas() {
-    canvas.style.width = createPxSize(world.width);
-    canvas.style.height = createPxSize(world.height);
-
-    canvas.width = Math.floor(world.width * dpr);
-    canvas.height = Math.floor(world.height * dpr);
-
-    imageData = context.createImageData(canvas.width, canvas.height);
-    data = imageData.data;
-  }
-
-  resizeCanvas();
   requestAnimationFrameLoop();
-
-  window.addEventListener("resize", resizeCanvas); // resize independent of main loop
-
-  const arrowLeft = "ArrowLeft";
-  const arrowRight = "ArrowRight";
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === arrowLeft) inputLeft = true;
-    if (e.key === arrowRight) inputRight = true;
-  });
-
-  document.addEventListener("keyup", (e) => {
-    if (e.key === arrowLeft) inputLeft = false;
-    if (e.key === arrowRight) inputRight = false;
-  });
 }
+
+// TODO:
+// Fixed Time-Step Update (Engine Quality Improvement). A fixed update with an accumulator.
+// pixel 0 in het midden van canvas?
+// Camera / World vs Screen Space. Add a camera offset.
+// Minimal Gameplay Goal. Platformer (gravity + jumping)
