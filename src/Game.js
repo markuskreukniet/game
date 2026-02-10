@@ -100,6 +100,14 @@ function createRenderer(canvas, context, world) {
     }
   }
 
+  // TODO: use it. // result of this function is const screenPos
+  function worldToScreen(x, y) {
+    return {
+      x: x + world.width / 2,
+      y: y + world.height / 2,
+    };
+  }
+
   function setPixel(x, y, r, g, b, a) {
     const i = (y * canvas.width + x) * 4;
     data[i] = r;
