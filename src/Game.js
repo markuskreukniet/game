@@ -9,15 +9,31 @@ function createPxSize(size) {
 }
 
 function createWorld() {
+  const width = 800;
+  const size = 50;
+  const maxX = width / 2;
+  const halfSize = size / 2;
+
   return {
-    width: 800,
+    width,
     height: 600,
+    maxX,
+    minX: -maxX,
     entities: [
       {
         type: "player",
         x: 0,
         y: 0,
-        size: 50,
+        size,
+        halfSize,
+        vx: 0,
+      },
+      {
+        type: "block",
+        x: 200,
+        y: 0,
+        size,
+        halfSize,
         vx: 0,
       },
     ],
@@ -66,11 +82,11 @@ function createCollisionSystem() {
   return {
     update(world) {
       for (const e of world.entities) {
-        if (e.x < 0) {
-          e.x = 0;
+        if (e.x - e.halfSize < world.minX) {
+          e.x = world.minX + e.halfSize;
           e.vx = 0;
-        } else if (e.x + e.size > world.width) {
-          e.x = world.width - e.size;
+        } else if (e.x + e.halfSize > world.maxX) {
+          e.x = world.maxX - e.halfSize;
           e.vx = 0;
         }
       }
@@ -78,7 +94,7 @@ function createCollisionSystem() {
   };
 }
 
-function createRenderer(canvas, context, world) {
+function createRenderer(canvas, context, world, camera) {
   let dpr = 0;
   let lastDpr = dpr;
   let imageData;
@@ -100,11 +116,10 @@ function createRenderer(canvas, context, world) {
     }
   }
 
-  // TODO: use it. // result of this function is const screenPos
   function worldToScreen(x, y) {
     return {
-      x: x + world.width / 2,
-      y: y + world.height / 2,
+      x: x - camera.x + world.maxX,
+      y: y - camera.y + world.height / 2,
     };
   }
 
@@ -116,19 +131,24 @@ function createRenderer(canvas, context, world) {
     data[i + 3] = a;
   }
 
-  function fillSquare(x, y, size, r, g, b, a) {
+  function fillSquareScreen(x, y, size, r, g, b, a) {
     // x/y may be fractional → integer pixels
     const startX = Math.floor(x * dpr);
     const startY = Math.floor(y * dpr);
     const endX = Math.floor((x + size) * dpr);
     const endY = Math.floor((y + size) * dpr);
 
-    // row-major order
+    // Write pixels in row-major order
     for (let py = startY; py < endY; py++) {
       for (let px = startX; px < endX; px++) {
         setPixel(px, py, r, g, b, a);
       }
     }
+  }
+
+  function fillSquareWorld(x, y, size, halfSize, r, g, b, a) {
+    const screenPos = worldToScreen(x - halfSize, y - halfSize);
+    fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b, a);
   }
 
   function clear() {
@@ -144,7 +164,7 @@ function createRenderer(canvas, context, world) {
 
   return {
     clear,
-    fillSquare,
+    fillSquareWorld,
     present,
   };
 }
@@ -155,7 +175,7 @@ function createRenderSystem(renderer) {
       renderer.clear();
 
       for (const e of world.entities) {
-        renderer.fillSquare(e.x, e.y, e.size, 50, 50, 50, 255);
+        renderer.fillSquareWorld(e.x, e.y, e.size, e.halfSize, 50, 50, 50, 255);
       }
 
       renderer.present();
@@ -173,12 +193,17 @@ export default function game(parent) {
   const canvas = createElement("canvas", parent);
   const context = canvas.getContext("2d");
 
+  const camera = {
+    x: 0,
+    y: 0,
+  };
+
   const world = createWorld();
 
   const inputSystem = createInputSystem();
   const movementSystem = createMovementSystem(speed);
   const collisionSystem = createCollisionSystem();
-  const renderer = createRenderer(canvas, context, world);
+  const renderer = createRenderer(canvas, context, world, camera);
   const renderSystem = createRenderSystem(renderer);
 
   let lastTime = 0;
@@ -190,6 +215,10 @@ export default function game(parent) {
       lastTime = time;
 
       movementSystem.update(world, inputSystem.input, frameTime / SECOND_IN_MS);
+
+      camera.x = world.entities[0].x;
+      camera.y = world.entities[0].y;
+
       collisionSystem.update(world);
       renderSystem.render(world);
     }
@@ -206,6 +235,4 @@ export default function game(parent) {
 
 // TODO:
 // Fixed Time-Step Update (Engine Quality Improvement). A fixed update with an accumulator.
-// pixel 0 in het midden van canvas?
-// Camera / World vs Screen Space. Add a camera offset.
 // Minimal Gameplay Goal. Platformer (gravity + jumping)
