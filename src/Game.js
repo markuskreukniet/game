@@ -8,11 +8,23 @@ function createPxSize(size) {
   return `${size}px`;
 }
 
+// TODO: type should be an enum
 function createWorld() {
   const width = 800;
   const size = 50;
   const maxX = width / 2;
   const halfSize = size / 2;
+
+  const player = {
+    type: "player",
+    x: 0,
+    y: -200, // TODO: should be 200
+    size,
+    halfSize,
+    vx: 0,
+    vy: 0,
+    grounded: false,
+  };
 
   return {
     width,
@@ -20,43 +32,43 @@ function createWorld() {
     maxX,
     minX: -maxX,
     entities: [
+      player,
       {
-        type: "player",
+        type: "solid",
         x: 0,
-        y: 0,
+        y: 200,
         size,
         halfSize,
-        vx: 0,
-      },
-      {
-        type: "block",
-        x: 200,
-        y: 0,
-        size,
-        halfSize,
-        vx: 0,
+        vx: null,
+        vy: null,
+        grounded: null,
       },
     ],
+    player,
   };
 }
 
 function createInputSystem() {
   const arrowLeft = "ArrowLeft";
   const arrowRight = "ArrowRight";
+  const arrowUp = "ArrowUp";
 
   const input = {
     left: false,
     right: false,
+    jump: false,
   };
 
   document.addEventListener("keydown", (e) => {
     if (e.key === arrowLeft) input.left = true;
     if (e.key === arrowRight) input.right = true;
+    if (e.key === arrowUp) input.jump = true;
   });
 
   document.addEventListener("keyup", (e) => {
     if (e.key === arrowLeft) input.left = false;
     if (e.key === arrowRight) input.right = false;
+    if (e.key === arrowUp) input.jump = false;
   });
 
   return { input };
@@ -64,14 +76,30 @@ function createInputSystem() {
 
 function createMovementSystem(speed) {
   return {
-    update(world, input, dt) {
+    update(world, input) {
       for (const e of world.entities) {
         if (e.type === "player") {
           if (input.left && !input.right) e.vx = -speed;
           else if (input.right && !input.left) e.vx = speed;
-          else e.vx = 0; // TODO: duplicate three times
+          else e.vx = 0; // TODO: duplicate
+        }
+      }
+    },
+  };
+}
 
+function createPhysicsSystem(gravity, jumpVelocity) {
+  return {
+    update(world, input, dt) {
+      for (const e of world.entities) {
+        if (e.type === "player") {
+          if (input.jump && e.grounded) {
+            e.vy = -jumpVelocity; // TODO: should be without the -
+          }
+
+          e.vy += gravity * dt;
           e.x += e.vx * dt;
+          e.y += e.vy * dt;
         }
       }
     },
@@ -81,13 +109,34 @@ function createMovementSystem(speed) {
 function createCollisionSystem() {
   return {
     update(world) {
+      world.player.grounded = false;
+
       for (const e of world.entities) {
-        if (e.x - e.halfSize < world.minX) {
-          e.x = world.minX + e.halfSize;
-          e.vx = 0;
-        } else if (e.x + e.halfSize > world.maxX) {
-          e.x = world.maxX - e.halfSize;
-          e.vx = 0;
+        if (e.type === "solid") {
+          const combinedHalfExtent = world.player.halfSize + e.halfSize;
+
+          const dx = world.player.x - e.x;
+          const dy = world.player.y - e.y;
+
+          const absDx = Math.abs(dx);
+          const absDy = Math.abs(dy);
+
+          if (absDx < combinedHalfExtent && absDy < combinedHalfExtent) {
+            const overlapX = combinedHalfExtent - absDx;
+            const overlapY = combinedHalfExtent - absDy;
+
+            if (overlapX < overlapY) {
+              world.player.x += dx > 0 ? overlapX : -overlapX;
+              world.player.vx = 0;
+            } else {
+              world.player.y += dy > 0 ? overlapY : -overlapY;
+              world.player.vy = 0;
+
+              if (dy < 0) {
+                world.player.grounded = true;
+              }
+            }
+          }
         }
       }
     },
@@ -189,6 +238,12 @@ export default function game(parent) {
   const fps = 30;
   const targetFrameTime = SECOND_IN_MS / fps;
   const speed = 100; // px/s
+  const jumpVelocity = 350; // px/s
+
+  // In 'e.vy += gravity * dt;' is vy in px/s and dt in s.
+  // gravity * dt = vy. gravity * s = px/s
+  // gravity = px/s / s. gravity = px/s * 1/s. gravity = px/s²
+  const gravity = 800;
 
   const canvas = createElement("canvas", parent);
   const context = canvas.getContext("2d");
@@ -202,6 +257,7 @@ export default function game(parent) {
 
   const inputSystem = createInputSystem();
   const movementSystem = createMovementSystem(speed);
+  const physicsSystem = createPhysicsSystem(gravity, jumpVelocity);
   const collisionSystem = createCollisionSystem();
   const renderer = createRenderer(canvas, context, world, camera);
   const renderSystem = createRenderSystem(renderer);
@@ -210,15 +266,17 @@ export default function game(parent) {
 
   function loop(time) {
     const frameTime = time - lastTime;
+    const dt = frameTime / SECOND_IN_MS;
 
     if (frameTime >= targetFrameTime) {
       lastTime = time;
 
-      movementSystem.update(world, inputSystem.input, frameTime / SECOND_IN_MS);
+      movementSystem.update(world, inputSystem.input, dt);
 
-      camera.x = world.entities[0].x;
-      camera.y = world.entities[0].y;
+      camera.x = world.player.x;
+      camera.y = world.player.y;
 
+      physicsSystem.update(world, inputSystem.input, dt);
       collisionSystem.update(world);
       renderSystem.render(world);
     }
@@ -236,3 +294,5 @@ export default function game(parent) {
 // TODO:
 // Fixed Time-Step Update (Engine Quality Improvement). A fixed update with an accumulator.
 // Minimal Gameplay Goal. Platformer (gravity + jumping)
+
+// goal for platformer
