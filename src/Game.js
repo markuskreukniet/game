@@ -8,43 +8,69 @@ function createPxSize(size) {
   return `${size}px`;
 }
 
-// TODO: type should be an enum
+// TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
+// TODO: createEntity is too broad for some entities
+function createEntity(
+  type,
+  x,
+  y,
+  size,
+  vx = null,
+  vy = null,
+  isGrounded = null,
+) {
+  return {
+    type, // TODO: is type useful?
+    x,
+    y,
+    prevX: x,
+    prevY: y,
+    renderX: x, // TODO: naming
+    renderY: y, // TODO: naming
+    size,
+    halfSize: size / 2,
+    vx, // px/s
+    vy, // px/s
+    isGrounded,
+  };
+}
+
+function computeBoundingBoxCollisionData(a, b) {
+  const combinedHalfSize = a.halfSize + b.halfSize;
+
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  return {
+    combinedHalfSize,
+    dx,
+    dy,
+    absDx,
+    absDy,
+    overlaps: absDx < combinedHalfSize && absDy < combinedHalfSize,
+  };
+}
+
 function createWorld() {
   const width = 800;
   const size = 50;
   const maxX = width / 2;
-  const halfSize = size / 2;
-
-  const player = {
-    type: "player",
-    x: 0,
-    y: -200, // TODO: should be 200
-    size,
-    halfSize,
-    vx: 0,
-    vy: 0,
-    grounded: false,
-  };
 
   return {
     width,
     height: 600,
     maxX,
     minX: -maxX,
-    entities: [
-      player,
-      {
-        type: "solid",
-        x: 0,
-        y: 200,
-        size,
-        halfSize,
-        vx: null,
-        vy: null,
-        grounded: null,
-      },
+    player: createEntity("player", 0, -200, size, 0, 0, false),
+    solids: [
+      createEntity("solid", 0, 200, size),
+      createEntity("solid", -100, 180, size),
     ],
-    player,
+    goal: createEntity("goal", 100, 150, size),
+    isWon: false,
   };
 }
 
@@ -77,13 +103,9 @@ function createInputSystem() {
 function createMovementSystem(speed) {
   return {
     update(world, input) {
-      for (const e of world.entities) {
-        if (e.type === "player") {
-          if (input.left && !input.right) e.vx = -speed;
-          else if (input.right && !input.left) e.vx = speed;
-          else e.vx = 0; // TODO: duplicate
-        }
-      }
+      if (input.left && !input.right) world.player.vx = -speed;
+      else if (input.right && !input.left) world.player.vx = speed;
+      else world.player.vx = 0; // TODO: duplicate
     },
   };
 }
@@ -91,17 +113,13 @@ function createMovementSystem(speed) {
 function createPhysicsSystem(gravity, jumpVelocity) {
   return {
     update(world, input, dt) {
-      for (const e of world.entities) {
-        if (e.type === "player") {
-          if (input.jump && e.grounded) {
-            e.vy = -jumpVelocity; // TODO: should be without the -
-          }
-
-          e.vy += gravity * dt;
-          e.x += e.vx * dt;
-          e.y += e.vy * dt;
-        }
+      if (input.jump && world.player.isGrounded) {
+        world.player.vy = jumpVelocity;
       }
+
+      world.player.vy += gravity * dt;
+      world.player.x += world.player.vx * dt;
+      world.player.y += world.player.vy * dt;
     },
   };
 }
@@ -109,35 +127,40 @@ function createPhysicsSystem(gravity, jumpVelocity) {
 function createCollisionSystem() {
   return {
     update(world) {
-      world.player.grounded = false;
+      world.player.isGrounded = false;
 
-      for (const e of world.entities) {
-        if (e.type === "solid") {
-          const combinedHalfExtent = world.player.halfSize + e.halfSize;
+      for (const e of world.solids) {
+        const data = computeBoundingBoxCollisionData(world.player, e);
 
-          const dx = world.player.x - e.x;
-          const dy = world.player.y - e.y;
+        if (data.overlaps) {
+          const overlapX = data.combinedHalfSize - data.absDx;
+          const overlapY = data.combinedHalfSize - data.absDy;
 
-          const absDx = Math.abs(dx);
-          const absDy = Math.abs(dy);
+          if (overlapX < overlapY) {
+            world.player.x += data.dx > 0 ? overlapX : -overlapX;
+            world.player.vx = 0;
+          } else {
+            world.player.y += data.dy > 0 ? overlapY : -overlapY;
+            world.player.vy = 0;
 
-          if (absDx < combinedHalfExtent && absDy < combinedHalfExtent) {
-            const overlapX = combinedHalfExtent - absDx;
-            const overlapY = combinedHalfExtent - absDy;
-
-            if (overlapX < overlapY) {
-              world.player.x += dx > 0 ? overlapX : -overlapX;
-              world.player.vx = 0;
-            } else {
-              world.player.y += dy > 0 ? overlapY : -overlapY;
-              world.player.vy = 0;
-
-              if (dy < 0) {
-                world.player.grounded = true;
-              }
+            if (data.dy < 0) {
+              world.player.isGrounded = true;
             }
           }
         }
+      }
+    },
+  };
+}
+
+function createGoalSystem() {
+  return {
+    update(world) {
+      if (
+        !world.isWon &&
+        computeBoundingBoxCollisionData(world.player, world.goal).overlaps
+      ) {
+        world.isWon = true;
       }
     },
   };
@@ -223,7 +246,42 @@ function createRenderSystem(renderer) {
     render(world) {
       renderer.clear();
 
-      for (const e of world.entities) {
+      if (world.isWon) {
+        renderer.fillSquareWorld(
+          world.goal.x,
+          world.goal.y,
+          world.goal.size,
+          world.goal.halfSize,
+          255,
+          215,
+          0,
+          255,
+        );
+      } else {
+        renderer.fillSquareWorld(
+          world.goal.x,
+          world.goal.y,
+          world.goal.size,
+          world.goal.halfSize,
+          0,
+          200,
+          0,
+          255,
+        );
+      }
+
+      renderer.fillSquareWorld(
+        world.player.renderX,
+        world.player.renderY,
+        world.player.size,
+        world.player.halfSize,
+        100,
+        100,
+        100,
+        255,
+      );
+
+      for (const e of world.solids) {
         renderer.fillSquareWorld(e.x, e.y, e.size, e.halfSize, 50, 50, 50, 255);
       }
 
@@ -235,10 +293,12 @@ function createRenderSystem(renderer) {
 export default function game(parent) {
   const SECOND_IN_MS = 1000;
 
-  const fps = 30;
-  const targetFrameTime = SECOND_IN_MS / fps;
+  const targetFps = 30;
+  const targetFrameMs = SECOND_IN_MS / targetFps;
+  const maxDeltaMs = targetFrameMs * 2;
+
   const speed = 100; // px/s
-  const jumpVelocity = 350; // px/s
+  const jumpVelocity = -350; // px/s
 
   // In 'e.vy += gravity * dt;' is vy in px/s and dt in s.
   // gravity * dt = vy. gravity * s = px/s
@@ -259,26 +319,51 @@ export default function game(parent) {
   const movementSystem = createMovementSystem(speed);
   const physicsSystem = createPhysicsSystem(gravity, jumpVelocity);
   const collisionSystem = createCollisionSystem();
+  const goalSystem = createGoalSystem();
   const renderer = createRenderer(canvas, context, world, camera);
   const renderSystem = createRenderSystem(renderer);
 
-  let lastTime = 0;
+  let last = performance.now();
+  let accumulator = 0;
+  let renderAccumulator = 0;
 
-  function loop(time) {
-    const frameTime = time - lastTime;
-    const dt = frameTime / SECOND_IN_MS;
+  function loop(now) {
+    let deltaMs = now - last;
+    last = now;
 
-    if (frameTime >= targetFrameTime) {
-      lastTime = time;
+    if (deltaMs > maxDeltaMs) deltaMs = maxDeltaMs;
 
-      movementSystem.update(world, inputSystem.input, dt);
+    accumulator += deltaMs;
+    renderAccumulator += deltaMs;
 
-      camera.x = world.player.x;
-      camera.y = world.player.y;
+    const deltaS = targetFrameMs / SECOND_IN_MS;
 
-      physicsSystem.update(world, inputSystem.input, dt);
+    while (accumulator >= targetFrameMs) {
+      world.player.prevX = world.player.x;
+      world.player.prevY = world.player.y;
+
+      movementSystem.update(world, inputSystem.input, deltaS);
+      physicsSystem.update(world, inputSystem.input, deltaS);
       collisionSystem.update(world);
+      goalSystem.update(world);
+
+      accumulator -= targetFrameMs;
+    }
+
+    if (renderAccumulator >= targetFrameMs) {
+      const alpha = accumulator / targetFrameMs; // TODO: check. alpha is good naming
+
+      world.player.renderX =
+        world.player.prevX + (world.player.x - world.player.prevX) * alpha; // TODO: check and duplicate
+      world.player.renderY =
+        world.player.prevY + (world.player.y - world.player.prevY) * alpha;
+
+      camera.x = world.player.renderX;
+      camera.y = world.player.renderY;
+
       renderSystem.render(world);
+
+      renderAccumulator -= targetFrameMs;
     }
 
     requestAnimationFrameLoop();
@@ -292,7 +377,6 @@ export default function game(parent) {
 }
 
 // TODO:
-// Fixed Time-Step Update (Engine Quality Improvement). A fixed update with an accumulator.
-// Minimal Gameplay Goal. Platformer (gravity + jumping)
-
-// goal for platformer
+// Add Friction / Air Control
+// Separate Simulation From Rendering State
+// Improve Collision System Architecture
