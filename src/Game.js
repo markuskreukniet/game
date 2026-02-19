@@ -23,6 +23,10 @@ function createEntity(
     type, // TODO: is type useful?
     x,
     y,
+    prevX: x,
+    prevY: y,
+    renderX: x, // TODO: naming
+    renderY: y, // TODO: naming
     size,
     halfSize: size / 2,
     vx, // px/s
@@ -267,8 +271,8 @@ function createRenderSystem(renderer) {
       }
 
       renderer.fillSquareWorld(
-        world.player.x,
-        world.player.y,
+        world.player.renderX,
+        world.player.renderY,
         world.player.size,
         world.player.halfSize,
         100,
@@ -335,6 +339,9 @@ export default function game(parent) {
     const deltaS = targetFrameMs / SECOND_IN_MS;
 
     while (accumulator >= targetFrameMs) {
+      world.player.prevX = world.player.x;
+      world.player.prevY = world.player.y;
+
       movementSystem.update(world, inputSystem.input, deltaS);
       physicsSystem.update(world, inputSystem.input, deltaS);
       collisionSystem.update(world);
@@ -344,8 +351,15 @@ export default function game(parent) {
     }
 
     if (renderAccumulator >= targetFrameMs) {
-      camera.x = world.player.x;
-      camera.y = world.player.y;
+      const alpha = accumulator / targetFrameMs; // TODO: check. alpha is good naming
+
+      world.player.renderX =
+        world.player.prevX + (world.player.x - world.player.prevX) * alpha; // TODO: check and duplicate
+      world.player.renderY =
+        world.player.prevY + (world.player.y - world.player.prevY) * alpha;
+
+      camera.x = world.player.renderX;
+      camera.y = world.player.renderY;
 
       renderSystem.render(world);
 
@@ -363,8 +377,6 @@ export default function game(parent) {
 }
 
 // TODO:
-// Add Render Interpolation
 // Add Friction / Air Control
 // Separate Simulation From Rendering State
-// Introduce Entity Types Properly (Enum or Constants)
 // Improve Collision System Architecture
