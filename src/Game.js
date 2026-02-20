@@ -1,3 +1,13 @@
+// Why are some values in px/s²? An example:
+// In 'vy += gravity * dt;' is vy in px/s and dt in s.
+// gravity * dt = vy. gravity * s = px/s
+// gravity = px/s / s. gravity = px/s * 1/s. gravity = px/s²
+
+// Why are some values in px/s? An example:
+// In 'brakingDelta = groundDeceleration * dt;' is groundDeceleration in px/s² and dt in s.
+// groundDeceleration * dt = brakingDelta. px/s² * s = brakingDelta
+// px/s² * s = px / (s * s) * s = px * s / (s * s) = (px / s) * (s / s) = px / s
+
 function createElement(element, parent) {
   const e = document.createElement(element);
   parent.appendChild(e);
@@ -25,8 +35,8 @@ function createEntity(
     y,
     prevX: x,
     prevY: y,
-    renderX: x, // TODO: naming
-    renderY: y, // TODO: naming
+    interpolatedX: x,
+    interpolatedY: y,
     size,
     halfSize: size / 2,
     vx, // px/s
@@ -52,6 +62,10 @@ function computeBoundingBoxCollisionData(a, b) {
     absDy,
     overlaps: absDx < combinedHalfSize && absDy < combinedHalfSize,
   };
+}
+
+function interpolate(start, end, alpha) {
+  return start + (end - start) * alpha;
 }
 
 function createWorld() {
@@ -100,24 +114,44 @@ function createInputSystem() {
   return { input };
 }
 
-function createMovementSystem(speed) {
+function createMovementSystem() {
+  const maxRightwardSpeed = 200; // px/s
+  const maxLeftwardSpeed = -maxRightwardSpeed; // px/s
+
   return {
-    update(world, input) {
-      if (input.left && !input.right) world.player.vx = -speed;
-      else if (input.right && !input.left) world.player.vx = speed;
-      else world.player.vx = 0; // TODO: duplicate
+    update(world, input, dt) {
+      const acceleration = world.player.isGrounded ? 1200 : 600; // px/s²
+
+      if (input.left && !input.right) {
+        world.player.vx -= acceleration * dt;
+      } else if (input.right && !input.left) {
+        world.player.vx += acceleration * dt;
+      } else if (world.player.isGrounded && world.player.vx !== 0) {
+        const brakingDelta = 1500 * dt; // px/s
+
+        world.player.vx =
+          world.player.vx > 0
+            ? Math.max(0, world.player.vx - brakingDelta)
+            : Math.min(0, world.player.vx + brakingDelta);
+      }
+
+      if (world.player.vx > maxRightwardSpeed) {
+        world.player.vx = maxRightwardSpeed;
+      } else if (world.player.vx < maxLeftwardSpeed) {
+        world.player.vx = maxLeftwardSpeed;
+      }
     },
   };
 }
 
-function createPhysicsSystem(gravity, jumpVelocity) {
+function createPhysicsSystem() {
   return {
     update(world, input, dt) {
       if (input.jump && world.player.isGrounded) {
-        world.player.vy = jumpVelocity;
+        world.player.vy = -350; // px/s
       }
 
-      world.player.vy += gravity * dt;
+      world.player.vy += 800 * dt; // px/s²
       world.player.x += world.player.vx * dt;
       world.player.y += world.player.vy * dt;
     },
@@ -271,8 +305,8 @@ function createRenderSystem(renderer) {
       }
 
       renderer.fillSquareWorld(
-        world.player.renderX,
-        world.player.renderY,
+        world.player.interpolatedX,
+        world.player.interpolatedY,
         world.player.size,
         world.player.halfSize,
         100,
@@ -293,17 +327,8 @@ function createRenderSystem(renderer) {
 export default function game(parent) {
   const SECOND_IN_MS = 1000;
 
-  const targetFps = 30;
-  const targetFrameMs = SECOND_IN_MS / targetFps;
+  const targetFrameMs = SECOND_IN_MS / 30; // SECOND_IN_MS / targetFps
   const maxDeltaMs = targetFrameMs * 2;
-
-  const speed = 100; // px/s
-  const jumpVelocity = -350; // px/s
-
-  // In 'e.vy += gravity * dt;' is vy in px/s and dt in s.
-  // gravity * dt = vy. gravity * s = px/s
-  // gravity = px/s / s. gravity = px/s * 1/s. gravity = px/s²
-  const gravity = 800;
 
   const canvas = createElement("canvas", parent);
   const context = canvas.getContext("2d");
@@ -316,8 +341,8 @@ export default function game(parent) {
   const world = createWorld();
 
   const inputSystem = createInputSystem();
-  const movementSystem = createMovementSystem(speed);
-  const physicsSystem = createPhysicsSystem(gravity, jumpVelocity);
+  const movementSystem = createMovementSystem();
+  const physicsSystem = createPhysicsSystem();
   const collisionSystem = createCollisionSystem();
   const goalSystem = createGoalSystem();
   const renderer = createRenderer(canvas, context, world, camera);
@@ -351,15 +376,21 @@ export default function game(parent) {
     }
 
     if (renderAccumulator >= targetFrameMs) {
-      const alpha = accumulator / targetFrameMs; // TODO: check. alpha is good naming
+      const alpha = accumulator / targetFrameMs;
 
-      world.player.renderX =
-        world.player.prevX + (world.player.x - world.player.prevX) * alpha; // TODO: check and duplicate
-      world.player.renderY =
-        world.player.prevY + (world.player.y - world.player.prevY) * alpha;
+      world.player.interpolatedX = interpolate(
+        world.player.prevX,
+        world.player.x,
+        alpha,
+      );
+      world.player.interpolatedY = interpolate(
+        world.player.prevY,
+        world.player.y,
+        alpha,
+      );
 
-      camera.x = world.player.renderX;
-      camera.y = world.player.renderY;
+      camera.x = world.player.interpolatedX;
+      camera.y = world.player.interpolatedY;
 
       renderSystem.render(world);
 
