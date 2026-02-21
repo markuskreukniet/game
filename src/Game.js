@@ -1,3 +1,8 @@
+// Why are some values in px/s²? An example:
+// In 'vy += gravity * dt;' is vy in px/s and dt in s.
+// gravity * dt = vy. gravity * s = px/s
+// gravity = px/s / s. gravity = px/s * 1/s. gravity = px/s²
+
 function createElement(element, parent) {
   const e = document.createElement(element);
   parent.appendChild(e);
@@ -105,13 +110,32 @@ function createInputSystem() {
 }
 
 function createMovementSystem() {
-  const speed = 100; // px/s
+  const maxRightwardSpeed = 200; // px/s // naming is good
+  const maxLeftwardSpeed = -maxRightwardSpeed; // px/s // naming is good
 
   return {
-    update(world, input) {
-      if (input.left && !input.right) world.player.vx = -speed;
-      else if (input.right && !input.left) world.player.vx = speed;
-      else world.player.vx = 0; // TODO: duplicate
+    update(world, input, dt) {
+      // TODO: check working between this {}
+      const acceleration = world.player.isGrounded ? 1200 : 600; // px/s²
+
+      if (input.left && !input.right) {
+        world.player.vx -= acceleration * dt;
+      } else if (input.right && !input.left) {
+        world.player.vx += acceleration * dt;
+      } else if (world.player.isGrounded && world.player.vx !== 0) {
+        const brakingDelta = 1500 * dt; // px/s // TODO: why px/s? // naming is good
+
+        world.player.vx =
+          world.player.vx > 0
+            ? Math.max(0, world.player.vx - brakingDelta)
+            : Math.min(0, world.player.vx + brakingDelta);
+      }
+
+      if (world.player.vx > maxRightwardSpeed) {
+        world.player.vx = maxRightwardSpeed;
+      } else if (world.player.vx < maxLeftwardSpeed) {
+        world.player.vx = maxLeftwardSpeed;
+      }
     },
   };
 }
@@ -123,10 +147,7 @@ function createPhysicsSystem() {
         world.player.vy = -350; // px/s
       }
 
-      // In 'vy += gravity * dt;' is vy in px/s and dt in s.
-      // gravity * dt = vy. gravity * s = px/s
-      // gravity = px/s / s. gravity = px/s * 1/s. gravity = px/s²
-      world.player.vy += 800 * dt;
+      world.player.vy += 800 * dt; // px/s²
       world.player.x += world.player.vx * dt;
       world.player.y += world.player.vy * dt;
     },
@@ -302,8 +323,7 @@ function createRenderSystem(renderer) {
 export default function game(parent) {
   const SECOND_IN_MS = 1000;
 
-  const targetFps = 30;
-  const targetFrameMs = SECOND_IN_MS / targetFps;
+  const targetFrameMs = SECOND_IN_MS / 30; // SECOND_IN_MS / targetFps
   const maxDeltaMs = targetFrameMs * 2;
 
   const canvas = createElement("canvas", parent);
