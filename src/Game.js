@@ -9,26 +9,18 @@
 // px/s² * s = px / (s * s) * s = px * s / (s * s) = (px / s) * (s / s) = px / s
 
 function createElement(element, parent) {
-  const e = document.createElement(element);
-  parent.appendChild(e);
-  return e;
+  const e = document.createElement(element)
+  parent.appendChild(e)
+  return e
 }
 
 function createPxSize(size) {
-  return `${size}px`;
+  return `${size}px`
 }
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 // TODO: createEntity is too broad for some entities
-function createEntity(
-  type,
-  x,
-  y,
-  size,
-  vx = null,
-  vy = null,
-  isGrounded = null,
-) {
+function createEntity(type, x, y, size, vx = null, vy = null, isGrounded = null) {
   return {
     type, // TODO: is type useful?
     x,
@@ -41,18 +33,18 @@ function createEntity(
     halfSize: size / 2,
     vx, // px/s
     vy, // px/s
-    isGrounded,
-  };
+    isGrounded
+  }
 }
 
 function computeBoundingBoxCollisionData(a, b) {
-  const combinedHalfSize = a.halfSize + b.halfSize;
+  const combinedHalfSize = a.halfSize + b.halfSize
 
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
+  const dx = a.x - b.x
+  const dy = a.y - b.y
 
-  const absDx = Math.abs(dx);
-  const absDy = Math.abs(dy);
+  const absDx = Math.abs(dx)
+  const absDy = Math.abs(dy)
 
   return {
     combinedHalfSize,
@@ -60,18 +52,18 @@ function computeBoundingBoxCollisionData(a, b) {
     dy,
     absDx,
     absDy,
-    overlaps: absDx < combinedHalfSize && absDy < combinedHalfSize,
-  };
+    overlaps: absDx < combinedHalfSize && absDy < combinedHalfSize
+  }
 }
 
 function interpolate(start, end, alpha) {
-  return start + (end - start) * alpha;
+  return start + (end - start) * alpha
 }
 
 function createWorld() {
-  const width = 800;
-  const size = 50;
-  const maxX = width / 2;
+  const width = 800
+  const size = 50
+  const maxX = width / 2
 
   return {
     width,
@@ -79,229 +71,205 @@ function createWorld() {
     maxX,
     minX: -maxX,
     player: createEntity("player", 0, -200, size, 0, 0, false),
-    solids: [
-      createEntity("solid", 0, 200, size),
-      createEntity("solid", -100, 180, size),
-    ],
+    solids: [createEntity("solid", 0, 200, size), createEntity("solid", -100, 180, size)],
     goal: createEntity("goal", 100, 150, size),
-    isWon: false,
-  };
+    isWon: false
+  }
 }
 
 function createInputSystem() {
-  const arrowLeft = "ArrowLeft";
-  const arrowRight = "ArrowRight";
-  const arrowUp = "ArrowUp";
+  const arrowLeft = "ArrowLeft"
+  const arrowRight = "ArrowRight"
+  const arrowUp = "ArrowUp"
 
   const input = {
     left: false,
     right: false,
-    jump: false,
-  };
+    jump: false
+  }
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === arrowLeft) input.left = true;
-    if (e.key === arrowRight) input.right = true;
-    if (e.key === arrowUp) input.jump = true;
-  });
+    if (e.key === arrowLeft) input.left = true
+    if (e.key === arrowRight) input.right = true
+    if (e.key === arrowUp) input.jump = true
+  })
 
   document.addEventListener("keyup", (e) => {
-    if (e.key === arrowLeft) input.left = false;
-    if (e.key === arrowRight) input.right = false;
-    if (e.key === arrowUp) input.jump = false;
-  });
+    if (e.key === arrowLeft) input.left = false
+    if (e.key === arrowRight) input.right = false
+    if (e.key === arrowUp) input.jump = false
+  })
 
-  return { input };
+  return { input }
 }
 
 function createMovementSystem() {
-  const maxRightwardSpeed = 200; // px/s
-  const maxLeftwardSpeed = -maxRightwardSpeed; // px/s
+  const maxRightwardSpeed = 200 // px/s
+  const maxLeftwardSpeed = -maxRightwardSpeed // px/s
 
   return {
     update(world, input, dt) {
-      const acceleration = world.player.isGrounded ? 1200 : 600; // px/s²
+      const acceleration = world.player.isGrounded ? 1200 : 600 // px/s²
 
       if (input.left && !input.right) {
-        world.player.vx -= acceleration * dt;
+        world.player.vx -= acceleration * dt
       } else if (input.right && !input.left) {
-        world.player.vx += acceleration * dt;
+        world.player.vx += acceleration * dt
       } else if (world.player.isGrounded && world.player.vx !== 0) {
-        const brakingDelta = 1500 * dt; // px/s
+        const brakingDelta = 1500 * dt // px/s
 
         world.player.vx =
           world.player.vx > 0
             ? Math.max(0, world.player.vx - brakingDelta)
-            : Math.min(0, world.player.vx + brakingDelta);
+            : Math.min(0, world.player.vx + brakingDelta)
       }
 
       if (world.player.vx > maxRightwardSpeed) {
-        world.player.vx = maxRightwardSpeed;
+        world.player.vx = maxRightwardSpeed
       } else if (world.player.vx < maxLeftwardSpeed) {
-        world.player.vx = maxLeftwardSpeed;
+        world.player.vx = maxLeftwardSpeed
       }
-    },
-  };
+    }
+  }
 }
 
 function createPhysicsSystem() {
   return {
     update(world, input, dt) {
       if (input.jump && world.player.isGrounded) {
-        world.player.vy = -350; // px/s
+        world.player.vy = -350 // px/s
       }
 
-      world.player.vy += 800 * dt; // px/s²
-      world.player.x += world.player.vx * dt;
-      world.player.y += world.player.vy * dt;
-    },
-  };
+      world.player.vy += 800 * dt // px/s²
+      world.player.x += world.player.vx * dt
+      world.player.y += world.player.vy * dt
+    }
+  }
 }
 
 function createCollisionSystem() {
   return {
     update(world) {
-      world.player.isGrounded = false;
+      world.player.isGrounded = false
 
       for (const e of world.solids) {
-        const data = computeBoundingBoxCollisionData(world.player, e);
+        const data = computeBoundingBoxCollisionData(world.player, e)
 
         if (data.overlaps) {
-          const overlapX = data.combinedHalfSize - data.absDx;
-          const overlapY = data.combinedHalfSize - data.absDy;
+          const overlapX = data.combinedHalfSize - data.absDx
+          const overlapY = data.combinedHalfSize - data.absDy
 
           if (overlapX < overlapY) {
-            world.player.x += data.dx > 0 ? overlapX : -overlapX;
-            world.player.vx = 0;
+            world.player.x += data.dx > 0 ? overlapX : -overlapX
+            world.player.vx = 0
           } else {
-            world.player.y += data.dy > 0 ? overlapY : -overlapY;
-            world.player.vy = 0;
+            world.player.y += data.dy > 0 ? overlapY : -overlapY
+            world.player.vy = 0
 
             if (data.dy < 0) {
-              world.player.isGrounded = true;
+              world.player.isGrounded = true
             }
           }
         }
       }
-    },
-  };
+    }
+  }
 }
 
 function createGoalSystem() {
   return {
     update(world) {
-      if (
-        !world.isWon &&
-        computeBoundingBoxCollisionData(world.player, world.goal).overlaps
-      ) {
-        world.isWon = true;
+      if (!world.isWon && computeBoundingBoxCollisionData(world.player, world.goal).overlaps) {
+        world.isWon = true
       }
-    },
-  };
+    }
+  }
 }
 
 function createRenderer(canvas, context, world, camera) {
-  let dpr = 0;
-  let lastDpr = dpr;
-  let imageData;
-  let data;
+  let dpr = 0
+  let lastDpr = dpr
+  let imageData
+  let data
 
   function resize() {
-    dpr = window.devicePixelRatio;
+    dpr = window.devicePixelRatio
     if (dpr !== lastDpr) {
-      lastDpr = dpr;
+      lastDpr = dpr
 
-      canvas.style.width = createPxSize(world.width);
-      canvas.style.height = createPxSize(world.height);
+      canvas.style.width = createPxSize(world.width)
+      canvas.style.height = createPxSize(world.height)
 
-      canvas.width = Math.floor(world.width * dpr);
-      canvas.height = Math.floor(world.height * dpr);
+      canvas.width = Math.floor(world.width * dpr)
+      canvas.height = Math.floor(world.height * dpr)
 
-      imageData = context.createImageData(canvas.width, canvas.height);
-      data = imageData.data;
+      imageData = context.createImageData(canvas.width, canvas.height)
+      data = imageData.data
     }
   }
 
   function worldToScreen(x, y) {
     return {
       x: x - camera.x + world.maxX,
-      y: y - camera.y + world.height / 2,
-    };
+      y: y - camera.y + world.height / 2
+    }
   }
 
   function setPixel(x, y, r, g, b, a) {
-    const i = (y * canvas.width + x) * 4;
-    data[i] = r;
-    data[i + 1] = g;
-    data[i + 2] = b;
-    data[i + 3] = a;
+    const i = (y * canvas.width + x) * 4
+    data[i] = r
+    data[i + 1] = g
+    data[i + 2] = b
+    data[i + 3] = a
   }
 
   function fillSquareScreen(x, y, size, r, g, b, a) {
     // x/y may be fractional → integer pixels
-    const startX = Math.floor(x * dpr);
-    const startY = Math.floor(y * dpr);
-    const endX = Math.floor((x + size) * dpr);
-    const endY = Math.floor((y + size) * dpr);
+    const startX = Math.floor(x * dpr)
+    const startY = Math.floor(y * dpr)
+    const endX = Math.floor((x + size) * dpr)
+    const endY = Math.floor((y + size) * dpr)
 
     // Write pixels in row-major order
     for (let py = startY; py < endY; py++) {
       for (let px = startX; px < endX; px++) {
-        setPixel(px, py, r, g, b, a);
+        setPixel(px, py, r, g, b, a)
       }
     }
   }
 
   function fillSquareWorld(x, y, size, halfSize, r, g, b, a) {
-    const screenPos = worldToScreen(x - halfSize, y - halfSize);
-    fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b, a);
+    const screenPos = worldToScreen(x - halfSize, y - halfSize)
+    fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b, a)
   }
 
   function clear() {
-    data.fill(0);
+    data.fill(0)
   }
 
   function present() {
-    context.putImageData(imageData, 0, 0);
+    context.putImageData(imageData, 0, 0)
   }
 
-  resize();
-  window.addEventListener("resize", resize); // resize independent of main loop
+  resize()
+  window.addEventListener("resize", resize) // resize independent of main loop
 
   return {
     clear,
     fillSquareWorld,
-    present,
-  };
+    present
+  }
 }
 
 function createRenderSystem(renderer) {
   return {
     render(world) {
-      renderer.clear();
+      renderer.clear()
 
       if (world.isWon) {
-        renderer.fillSquareWorld(
-          world.goal.x,
-          world.goal.y,
-          world.goal.size,
-          world.goal.halfSize,
-          255,
-          215,
-          0,
-          255,
-        );
+        renderer.fillSquareWorld(world.goal.x, world.goal.y, world.goal.size, world.goal.halfSize, 255, 215, 0, 255)
       } else {
-        renderer.fillSquareWorld(
-          world.goal.x,
-          world.goal.y,
-          world.goal.size,
-          world.goal.halfSize,
-          0,
-          200,
-          0,
-          255,
-        );
+        renderer.fillSquareWorld(world.goal.x, world.goal.y, world.goal.size, world.goal.halfSize, 0, 200, 0, 255)
       }
 
       renderer.fillSquareWorld(
@@ -312,99 +280,91 @@ function createRenderSystem(renderer) {
         100,
         100,
         100,
-        255,
-      );
+        255
+      )
 
       for (const e of world.solids) {
-        renderer.fillSquareWorld(e.x, e.y, e.size, e.halfSize, 50, 50, 50, 255);
+        renderer.fillSquareWorld(e.x, e.y, e.size, e.halfSize, 50, 50, 50, 255)
       }
 
-      renderer.present();
-    },
-  };
+      renderer.present()
+    }
+  }
 }
 
 export default function game(parent) {
-  const SECOND_IN_MS = 1000;
+  const SECOND_IN_MS = 1000
 
-  const targetFrameMs = SECOND_IN_MS / 30; // SECOND_IN_MS / targetFps
-  const maxDeltaMs = targetFrameMs * 2;
+  const targetFrameMs = SECOND_IN_MS / 30 // SECOND_IN_MS / targetFps
+  const maxDeltaMs = targetFrameMs * 2
 
-  const canvas = createElement("canvas", parent);
-  const context = canvas.getContext("2d");
+  const canvas = createElement("canvas", parent)
+  const context = canvas.getContext("2d")
 
   const camera = {
     x: 0,
-    y: 0,
-  };
+    y: 0
+  }
 
-  const world = createWorld();
+  const world = createWorld()
 
-  const inputSystem = createInputSystem();
-  const movementSystem = createMovementSystem();
-  const physicsSystem = createPhysicsSystem();
-  const collisionSystem = createCollisionSystem();
-  const goalSystem = createGoalSystem();
-  const renderer = createRenderer(canvas, context, world, camera);
-  const renderSystem = createRenderSystem(renderer);
+  const inputSystem = createInputSystem()
+  const movementSystem = createMovementSystem()
+  const physicsSystem = createPhysicsSystem()
+  const collisionSystem = createCollisionSystem()
+  const goalSystem = createGoalSystem()
+  const renderer = createRenderer(canvas, context, world, camera)
+  const renderSystem = createRenderSystem(renderer)
 
-  let last = performance.now();
-  let accumulator = 0;
-  let renderAccumulator = 0;
+  let last = performance.now()
+  let accumulator = 0
+  let renderAccumulator = 0
 
   function loop(now) {
-    let deltaMs = now - last;
-    last = now;
+    let deltaMs = now - last
+    last = now
 
-    if (deltaMs > maxDeltaMs) deltaMs = maxDeltaMs;
+    if (deltaMs > maxDeltaMs) deltaMs = maxDeltaMs
 
-    accumulator += deltaMs;
-    renderAccumulator += deltaMs;
+    accumulator += deltaMs
+    renderAccumulator += deltaMs
 
-    const deltaS = targetFrameMs / SECOND_IN_MS;
+    const deltaS = targetFrameMs / SECOND_IN_MS
 
     while (accumulator >= targetFrameMs) {
-      world.player.prevX = world.player.x;
-      world.player.prevY = world.player.y;
+      world.player.prevX = world.player.x
+      world.player.prevY = world.player.y
 
-      movementSystem.update(world, inputSystem.input, deltaS);
-      physicsSystem.update(world, inputSystem.input, deltaS);
-      collisionSystem.update(world);
-      goalSystem.update(world);
+      movementSystem.update(world, inputSystem.input, deltaS)
+      physicsSystem.update(world, inputSystem.input, deltaS)
+      collisionSystem.update(world)
+      goalSystem.update(world)
 
-      accumulator -= targetFrameMs;
+      accumulator -= targetFrameMs
     }
 
     if (renderAccumulator >= targetFrameMs) {
-      const alpha = accumulator / targetFrameMs;
+      const alpha = accumulator / targetFrameMs
 
-      world.player.interpolatedX = interpolate(
-        world.player.prevX,
-        world.player.x,
-        alpha,
-      );
-      world.player.interpolatedY = interpolate(
-        world.player.prevY,
-        world.player.y,
-        alpha,
-      );
+      world.player.interpolatedX = interpolate(world.player.prevX, world.player.x, alpha)
+      world.player.interpolatedY = interpolate(world.player.prevY, world.player.y, alpha)
 
-      camera.x = world.player.interpolatedX;
-      camera.y = world.player.interpolatedY;
+      camera.x = world.player.interpolatedX
+      camera.y = world.player.interpolatedY
 
-      renderSystem.render(world);
+      renderSystem.render(world)
 
-      renderAccumulator -= targetFrameMs;
+      renderAccumulator -= targetFrameMs
     }
 
-    requestAnimationFrameLoop();
+    requestAnimationFrameLoop()
   }
 
   function requestAnimationFrameLoop() {
-    requestAnimationFrame(loop);
+    requestAnimationFrame(loop)
   }
 
-  requestAnimationFrameLoop();
+  requestAnimationFrameLoop()
 }
 
 // TODO:
