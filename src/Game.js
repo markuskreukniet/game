@@ -20,20 +20,21 @@ function createPxSize(size) {
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 // TODO: createEntity is too broad for some entities
-function createEntity(type, x, y, size, vx = null, vy = null, isGrounded = null) {
+function createEntity(x, y, size, vx = null, vy = null, isGrounded = null) {
   return {
-    type, // TODO: is type useful?
     x,
     y,
-    prevX: x,
-    prevY: y,
-    interpolatedX: x,
-    interpolatedY: y,
     size,
     halfSize: size / 2,
     vx, // px/s
     vy, // px/s
     isGrounded
+  }
+}
+
+function snapshotWorld(world) {
+  return {
+    player: { x: world.player.x, y: world.player.y }
   }
 }
 
@@ -70,10 +71,38 @@ function createWorld() {
     height: 600,
     maxX,
     minX: -maxX,
-    player: createEntity("player", 0, -200, size, 0, 0, false),
-    solids: [createEntity("solid", 0, 200, size), createEntity("solid", -100, 180, size)],
-    goal: createEntity("goal", 100, 150, size),
+    player: createEntity(0, -200, size, 0, 0, false),
+    solids: [createEntity(0, 200, size), createEntity(-100, 180, size), createEntity(50, 530, 500)],
+    goal: createEntity(100, 150, size),
     isWon: false
+  }
+}
+
+function buildFrameData(previous, current, alpha, world) {
+  const playerX = interpolate(previous.player.x, current.player.x, alpha)
+  const playerY = interpolate(previous.player.y, current.player.y, alpha)
+
+  // TODO: duplicate x, y, size, halfSize
+  return {
+    isWon: world.isWon,
+    goal: {
+      x: world.goal.x,
+      y: world.goal.y,
+      size: world.goal.size,
+      halfSize: world.goal.halfSize
+    },
+    solids: world.solids.map((s) => ({
+      x: s.x,
+      y: s.y,
+      size: s.size,
+      halfSize: s.halfSize
+    })),
+    player: {
+      x: playerX,
+      y: playerY,
+      size: world.player.size,
+      halfSize: world.player.halfSize
+    }
   }
 }
 
@@ -104,25 +133,20 @@ function createInputSystem() {
 }
 
 function createMovementSystem() {
-  const maxRightwardSpeed = 200 // px/s
+  const maxRightwardSpeed = 220 // px/s
   const maxLeftwardSpeed = -maxRightwardSpeed // px/s
 
   return {
     update(world, input, dt) {
-      const acceleration = world.player.isGrounded ? 1200 : 600 // px/s²
+      const acceleration = world.player.isGrounded ? 1500 : 500 // px/s²
 
       if (input.left && !input.right) {
         world.player.vx -= acceleration * dt
       } else if (input.right && !input.left) {
         world.player.vx += acceleration * dt
-      } else if (world.player.isGrounded && world.player.vx !== 0) {
-        const brakingDelta = 1500 * dt // px/s
-
-        world.player.vx =
-          world.player.vx > 0
-            ? Math.max(0, world.player.vx - brakingDelta)
-            : Math.min(0, world.player.vx + brakingDelta)
       }
+
+      world.player.vx -= world.player.vx * (world.player.isGrounded ? 15 : 2) * dt
 
       if (world.player.vx > maxRightwardSpeed) {
         world.player.vx = maxRightwardSpeed
@@ -224,11 +248,15 @@ function createRenderer(canvas, context, world, camera) {
   }
 
   function fillSquareScreen(x, y, size, r, g, b, a) {
+    fillRectScreen(x, y, size, size, r, g, b, a)
+  }
+
+  function fillRectScreen(x, y, width, height, r, g, b, a) {
     // x/y may be fractional → integer pixels
-    const startX = Math.floor(x * dpr)
-    const startY = Math.floor(y * dpr)
-    const endX = Math.floor((x + size) * dpr)
-    const endY = Math.floor((y + size) * dpr)
+    const startX = Math.max(0, Math.floor(x * dpr)) // TODO: duplicate
+    const startY = Math.max(0, Math.floor(y * dpr))
+    const endX = Math.min(canvas.width, Math.floor((x + width) * dpr))
+    const endY = Math.min(canvas.height, Math.floor((y + height) * dpr))
 
     // Write pixels in row-major order
     for (let py = startY; py < endY; py++) {
@@ -263,28 +291,46 @@ function createRenderer(canvas, context, world, camera) {
 
 function createRenderSystem(renderer) {
   return {
-    render(world) {
+    render(frameData) {
       renderer.clear()
 
-      if (world.isWon) {
-        renderer.fillSquareWorld(world.goal.x, world.goal.y, world.goal.size, world.goal.halfSize, 255, 215, 0, 255)
+      if (frameData.isWon) {
+        renderer.fillSquareWorld(
+          frameData.goal.x,
+          frameData.goal.y,
+          frameData.goal.size,
+          frameData.goal.halfSize,
+          255,
+          215,
+          0,
+          255
+        )
       } else {
-        renderer.fillSquareWorld(world.goal.x, world.goal.y, world.goal.size, world.goal.halfSize, 0, 200, 0, 255)
+        renderer.fillSquareWorld(
+          frameData.goal.x,
+          frameData.goal.y,
+          frameData.goal.size,
+          frameData.goal.halfSize,
+          0,
+          200,
+          0,
+          255
+        )
       }
 
       renderer.fillSquareWorld(
-        world.player.interpolatedX,
-        world.player.interpolatedY,
-        world.player.size,
-        world.player.halfSize,
+        frameData.player.x,
+        frameData.player.y,
+        frameData.player.size,
+        frameData.player.halfSize,
         100,
         100,
         100,
         255
       )
 
-      for (const e of world.solids) {
-        renderer.fillSquareWorld(e.x, e.y, e.size, e.halfSize, 50, 50, 50, 255)
+      for (const s of frameData.solids) {
+        renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50, 255)
       }
 
       renderer.present()
@@ -297,6 +343,7 @@ export default function game(parent) {
 
   const targetFrameMs = SECOND_IN_MS / 30 // SECOND_IN_MS / targetFps
   const maxDeltaMs = targetFrameMs * 2
+  const deltaS = targetFrameMs / SECOND_IN_MS
 
   const canvas = createElement("canvas", parent)
   const context = canvas.getContext("2d")
@@ -320,6 +367,9 @@ export default function game(parent) {
   let accumulator = 0
   let renderAccumulator = 0
 
+  let currentSnapshot = snapshotWorld(world)
+  let previousSnapshot = currentSnapshot
+
   function loop(now) {
     let deltaMs = now - last
     last = now
@@ -329,30 +379,25 @@ export default function game(parent) {
     accumulator += deltaMs
     renderAccumulator += deltaMs
 
-    const deltaS = targetFrameMs / SECOND_IN_MS
-
     while (accumulator >= targetFrameMs) {
-      world.player.prevX = world.player.x
-      world.player.prevY = world.player.y
+      previousSnapshot = currentSnapshot
 
       movementSystem.update(world, inputSystem.input, deltaS)
       physicsSystem.update(world, inputSystem.input, deltaS)
       collisionSystem.update(world)
       goalSystem.update(world)
 
+      currentSnapshot = snapshotWorld(world)
       accumulator -= targetFrameMs
     }
 
     if (renderAccumulator >= targetFrameMs) {
-      const alpha = accumulator / targetFrameMs
+      const frameData = buildFrameData(previousSnapshot, currentSnapshot, accumulator / targetFrameMs, world)
 
-      world.player.interpolatedX = interpolate(world.player.prevX, world.player.x, alpha)
-      world.player.interpolatedY = interpolate(world.player.prevY, world.player.y, alpha)
+      camera.x = frameData.player.x
+      camera.y = frameData.player.y
 
-      camera.x = world.player.interpolatedX
-      camera.y = world.player.interpolatedY
-
-      renderSystem.render(world)
+      renderSystem.render(frameData)
 
       renderAccumulator -= targetFrameMs
     }
@@ -368,6 +413,7 @@ export default function game(parent) {
 }
 
 // TODO:
-// Add Friction / Air Control
-// Separate Simulation From Rendering State
 // Improve Collision System Architecture
+// Clamp / bounds. Prevent player from going beyond world.minX/maxX, and add “kill plane” (if player falls below Y, respawn). Benefit: game won’t soft-break.
+// Basic level restart / win state handling. When isWon, disable movement or show message overlay; add “press R to restart”.
+// (maybe hard/big change?) Camera smoothing. Interpolate camera position towards player instead of snapping: camera.x = lerp(camera.x, targetX, 1 - exp(-k*dt)) (or simple alpha). Add dead-zone so camera doesn’t micro-jitter.
