@@ -38,7 +38,6 @@ function snapshotWorld(world) {
   }
 }
 
-// respawnPlayer is good naming
 function respawnPlayer(world) {
   world.player.x = world.spawn.x
   world.player.y = world.spawn.y
@@ -70,11 +69,16 @@ function interpolate(start, end, alpha) {
   return start + (end - start) * alpha
 }
 
+function resetWorld(world) {
+  world.isWon = false
+  respawnPlayer(world)
+}
+
 function createWorld() {
   const width = 800
   const size = 50
   const maxX = width / 2
-  const spawn = { x: 0, y: -200 } // is good naming
+  const spawn = { x: 0, y: -200 }
 
   return {
     width,
@@ -82,7 +86,7 @@ function createWorld() {
     maxX,
     minX: -maxX,
     spawn,
-    killPlaneY: 900, // is good naming
+    killPlaneY: 900,
     player: createEntity(spawn.x, spawn.y, size, 0, 0, false),
     solids: [createEntity(0, 200, size), createEntity(-100, 180, size), createEntity(50, 530, 500)],
     goal: createEntity(100, 150, size),
@@ -96,6 +100,8 @@ function buildFrameData(previous, current, alpha, world) {
 
   // TODO: duplicate x, y, size, halfSize
   return {
+    renderWidth: world.width,
+    renderHeight: world.height,
     isWon: world.isWon,
     goal: {
       x: world.goal.x,
@@ -122,23 +128,27 @@ function createInputSystem() {
   const arrowLeft = "ArrowLeft"
   const arrowRight = "ArrowRight"
   const arrowUp = "ArrowUp"
+  const keyR = "KeyR"
 
   const input = {
     left: false,
     right: false,
-    jump: false
+    jump: false,
+    reset: false
   }
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === arrowLeft) input.left = true
-    if (e.key === arrowRight) input.right = true
-    if (e.key === arrowUp) input.jump = true
+    if (e.code === arrowLeft) input.left = true
+    if (e.code === arrowRight) input.right = true
+    if (e.code === arrowUp) input.jump = true
+    if (e.code === keyR) input.reset = true // TODO: make sure it triggers once
   })
 
   document.addEventListener("keyup", (e) => {
-    if (e.key === arrowLeft) input.left = false
-    if (e.key === arrowRight) input.right = false
-    if (e.key === arrowUp) input.jump = false
+    if (e.code === arrowLeft) input.left = false
+    if (e.code === arrowRight) input.right = false
+    if (e.code === arrowUp) input.jump = false
+    if (e.code === keyR) input.reset = false
   })
 
   return { input }
@@ -222,14 +232,13 @@ function createGoalSystem() {
   }
 }
 
-// createWorldConstraintSystem is good naming
 function createWorldConstraintSystem(world) {
-  const minPlayerX = world.minX + world.player.halfSize // good naming
-  const maxPlayerX = world.maxX - world.player.halfSize // good naming
+  const minPlayerX = world.minX + world.player.halfSize
+  const maxPlayerX = world.maxX - world.player.halfSize
 
   return {
     update(world) {
-      const clampedX = Math.max(minPlayerX, Math.min(maxPlayerX, world.player.x)) // good naming. Better than branching
+      const clampedX = Math.max(minPlayerX, Math.min(maxPlayerX, world.player.x))
       if (clampedX !== world.player.x) {
         world.player.x = clampedX
         world.player.vx = 0
@@ -271,12 +280,12 @@ function createRenderer(canvas, context, world, camera) {
     }
   }
 
-  function setPixel(x, y, r, g, b, a) {
+  function setPixel(x, y, r, g, b) {
     const i = (y * canvas.width + x) * 4
     data[i] = r
     data[i + 1] = g
     data[i + 2] = b
-    data[i + 3] = a
+    data[i + 3] = 255
   }
 
   function fillSquareScreen(x, y, size, r, g, b, a) {
@@ -290,10 +299,14 @@ function createRenderer(canvas, context, world, camera) {
     const endX = Math.min(canvas.width, Math.floor((x + width) * dpr))
     const endY = Math.min(canvas.height, Math.floor((y + height) * dpr))
 
+    if (a === 255) {
+      console.log("a", a) // TODO:
+    }
+
     // Write pixels in row-major order
     for (let py = startY; py < endY; py++) {
       for (let px = startX; px < endX; px++) {
-        setPixel(px, py, r, g, b, a)
+        setPixel(px, py, r, g, b)
       }
     }
   }
@@ -317,6 +330,7 @@ function createRenderer(canvas, context, world, camera) {
   return {
     clear,
     fillSquareWorld,
+    fillRectScreen,
     present
   }
 }
@@ -337,6 +351,8 @@ function createRenderSystem(renderer) {
           0,
           255
         )
+
+        renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180) // TODO: does not work correct as an overlay. Is its place correct?
       } else {
         renderer.fillSquareWorld(
           frameData.goal.x,
@@ -415,11 +431,15 @@ export default function game(parent) {
     while (accumulator >= targetFrameMs) {
       previousSnapshot = currentSnapshot
 
-      movementSystem.update(world, inputSystem.input, deltaS)
-      physicsSystem.update(world, inputSystem.input, deltaS)
-      collisionSystem.update(world)
-      goalSystem.update(world)
-      worldConstraintSystem.update(world)
+      if (world.isWon && inputSystem.input.reset) {
+        resetWorld(world)
+      } else {
+        movementSystem.update(world, inputSystem.input, deltaS)
+        physicsSystem.update(world, inputSystem.input, deltaS)
+        collisionSystem.update(world)
+        goalSystem.update(world)
+        worldConstraintSystem.update(world)
+      }
 
       currentSnapshot = snapshotWorld(world)
       accumulator -= targetFrameMs
@@ -448,5 +468,5 @@ export default function game(parent) {
 
 // TODO:
 // Improve Collision System Architecture
-// Basic level restart / win state handling. When isWon, disable movement or show message overlay; add “press R to restart”.
+// show message overlay; add “press R to restart” with Bitmap Font (Recommended for 8-bit)
 // (maybe hard/big change?) Camera smoothing. Interpolate camera position towards player instead of snapping: camera.x = lerp(camera.x, targetX, 1 - exp(-k*dt)) (or simple alpha). Add dead-zone so camera doesn’t micro-jitter.
