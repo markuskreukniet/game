@@ -38,6 +38,15 @@ function snapshotWorld(world) {
   }
 }
 
+// respawnPlayer is good naming
+function respawnPlayer(world) {
+  world.player.x = world.spawn.x
+  world.player.y = world.spawn.y
+  world.player.vx = 0 // TODO: duplicate
+  world.player.vy = 0 // TODO: duplicate
+  world.player.isGrounded = false // TODO: duplicate
+}
+
 function computeBoundingBoxCollisionData(a, b) {
   const combinedHalfSize = a.halfSize + b.halfSize
 
@@ -65,13 +74,16 @@ function createWorld() {
   const width = 800
   const size = 50
   const maxX = width / 2
+  const spawn = { x: 0, y: -200 } // is good naming
 
   return {
     width,
     height: 600,
     maxX,
     minX: -maxX,
-    player: createEntity(0, -200, size, 0, 0, false),
+    spawn,
+    killPlaneY: 900, // is good naming
+    player: createEntity(spawn.x, spawn.y, size, 0, 0, false),
     solids: [createEntity(0, 200, size), createEntity(-100, 180, size), createEntity(50, 530, 500)],
     goal: createEntity(100, 150, size),
     isWon: false
@@ -205,6 +217,26 @@ function createGoalSystem() {
     update(world) {
       if (!world.isWon && computeBoundingBoxCollisionData(world.player, world.goal).overlaps) {
         world.isWon = true
+      }
+    }
+  }
+}
+
+// createWorldConstraintSystem is good naming
+function createWorldConstraintSystem(world) {
+  const minPlayerX = world.minX + world.player.halfSize // good naming
+  const maxPlayerX = world.maxX - world.player.halfSize // good naming
+
+  return {
+    update(world) {
+      const clampedX = Math.max(minPlayerX, Math.min(maxPlayerX, world.player.x)) // good naming. Better than branching
+      if (clampedX !== world.player.x) {
+        world.player.x = clampedX
+        world.player.vx = 0
+      }
+
+      if (world.player.y - world.player.halfSize > world.killPlaneY) {
+        respawnPlayer(world)
       }
     }
   }
@@ -360,6 +392,7 @@ export default function game(parent) {
   const physicsSystem = createPhysicsSystem()
   const collisionSystem = createCollisionSystem()
   const goalSystem = createGoalSystem()
+  const worldConstraintSystem = createWorldConstraintSystem(world)
   const renderer = createRenderer(canvas, context, world, camera)
   const renderSystem = createRenderSystem(renderer)
 
@@ -386,6 +419,7 @@ export default function game(parent) {
       physicsSystem.update(world, inputSystem.input, deltaS)
       collisionSystem.update(world)
       goalSystem.update(world)
+      worldConstraintSystem.update(world)
 
       currentSnapshot = snapshotWorld(world)
       accumulator -= targetFrameMs
@@ -414,6 +448,5 @@ export default function game(parent) {
 
 // TODO:
 // Improve Collision System Architecture
-// Clamp / bounds. Prevent player from going beyond world.minX/maxX, and add “kill plane” (if player falls below Y, respawn). Benefit: game won’t soft-break.
 // Basic level restart / win state handling. When isWon, disable movement or show message overlay; add “press R to restart”.
 // (maybe hard/big change?) Camera smoothing. Interpolate camera position towards player instead of snapping: camera.x = lerp(camera.x, targetX, 1 - exp(-k*dt)) (or simple alpha). Add dead-zone so camera doesn’t micro-jitter.
