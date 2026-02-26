@@ -252,6 +252,8 @@ function createWorldConstraintSystem(world) {
 }
 
 function createRenderer(canvas, context, world, camera) {
+  const screenCenterY = world.height / 2
+
   let dpr = 0
   let lastDpr = dpr
   let imageData
@@ -276,16 +278,12 @@ function createRenderer(canvas, context, world, camera) {
   function worldToScreen(x, y) {
     return {
       x: x - camera.x + world.maxX,
-      y: y - camera.y + world.height / 2
+      y: y - camera.y + screenCenterY
     }
   }
 
-  function setPixel(x, y, r, g, b) {
-    const i = (y * canvas.width + x) * 4
-    data[i] = r
-    data[i + 1] = g
-    data[i + 2] = b
-    data[i + 3] = 255
+  function snapToDevicePixel(coord) {
+    return Math.max(0, Math.floor(coord * dpr)) // TODO: duplicate * dpr
   }
 
   function fillSquareScreen(x, y, size, r, g, b, a) {
@@ -294,24 +292,54 @@ function createRenderer(canvas, context, world, camera) {
 
   function fillRectScreen(x, y, width, height, r, g, b, a) {
     // x/y may be fractional → integer pixels
-    const startX = Math.max(0, Math.floor(x * dpr)) // TODO: duplicate
-    const startY = Math.max(0, Math.floor(y * dpr))
+    const startX = snapToDevicePixel(x)
+    const startY = snapToDevicePixel(y)
     const endX = Math.min(canvas.width, Math.floor((x + width) * dpr))
     const endY = Math.min(canvas.height, Math.floor((y + height) * dpr))
 
-    if (a === 255) {
-      console.log("a", a) // TODO:
-    }
+    const w = canvas.width
 
-    // Write pixels in row-major order
-    for (let py = startY; py < endY; py++) {
-      for (let px = startX; px < endX; px++) {
-        setPixel(px, py, r, g, b)
+    // duplicate code for performance. // Write pixels in row-major order
+    if (a === 255) {
+      for (let py = startY; py < endY; py++) {
+        let i = (py * w + startX) * 4
+
+        for (let px = startX; px < endX; px++) {
+          data[i] = r
+          data[i + 1] = g
+          data[i + 2] = b
+          data[i + 3] = 255
+
+          i += 4
+        }
+      }
+    } else {
+      const dstWeight = 255 - a
+      const inv255 = 1 / 255
+
+      const srcR = r * a
+      const srcG = g * a
+      const srcB = b * a
+
+      for (let py = startY; py < endY; py++) {
+        let i = (py * w + startX) * 4
+
+        for (let px = startX; px < endX; px++) {
+          const iPlusOne = i + 1
+          const iPlusTwo = i + 2
+
+          data[i] = (srcR + data[i] * dstWeight) * inv255
+          data[iPlusOne] = (srcG + data[iPlusOne] * dstWeight) * inv255
+          data[iPlusTwo] = (srcB + data[iPlusTwo] * dstWeight) * inv255
+          data[i + 3] = 255
+
+          i += 4
+        }
       }
     }
   }
 
-  function fillSquareWorld(x, y, size, halfSize, r, g, b, a) {
+  function fillSquareWorld(x, y, size, halfSize, r, g, b, a = 255) {
     const screenPos = worldToScreen(x - halfSize, y - halfSize)
     fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b, a)
   }
@@ -340,30 +368,8 @@ function createRenderSystem(renderer) {
     render(frameData) {
       renderer.clear()
 
-      if (frameData.isWon) {
-        renderer.fillSquareWorld(
-          frameData.goal.x,
-          frameData.goal.y,
-          frameData.goal.size,
-          frameData.goal.halfSize,
-          255,
-          215,
-          0,
-          255
-        )
-
-        renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180) // TODO: does not work correct as an overlay. Is its place correct?
-      } else {
-        renderer.fillSquareWorld(
-          frameData.goal.x,
-          frameData.goal.y,
-          frameData.goal.size,
-          frameData.goal.halfSize,
-          0,
-          200,
-          0,
-          255
-        )
+      for (const s of frameData.solids) {
+        renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50)
       }
 
       renderer.fillSquareWorld(
@@ -373,12 +379,31 @@ function createRenderSystem(renderer) {
         frameData.player.halfSize,
         100,
         100,
-        100,
-        255
+        100
       )
 
-      for (const s of frameData.solids) {
-        renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50, 255)
+      if (frameData.isWon) {
+        renderer.fillSquareWorld(
+          frameData.goal.x,
+          frameData.goal.y,
+          frameData.goal.size,
+          frameData.goal.halfSize,
+          255,
+          215,
+          0
+        )
+
+        renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180)
+      } else {
+        renderer.fillSquareWorld(
+          frameData.goal.x,
+          frameData.goal.y,
+          frameData.goal.size,
+          frameData.goal.halfSize,
+          0,
+          200,
+          0
+        )
       }
 
       renderer.present()
@@ -470,3 +495,5 @@ export default function game(parent) {
 // Improve Collision System Architecture
 // show message overlay; add “press R to restart” with Bitmap Font (Recommended for 8-bit)
 // (maybe hard/big change?) Camera smoothing. Interpolate camera position towards player instead of snapping: camera.x = lerp(camera.x, targetX, 1 - exp(-k*dt)) (or simple alpha). Add dead-zone so camera doesn’t micro-jitter.
+
+// should numbers like 255 be an constant?
