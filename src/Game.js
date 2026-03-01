@@ -339,7 +339,7 @@ function createRenderer(canvas, context, world, camera) {
     }
   }
 
-  function fillSquareWorld(x, y, size, halfSize, r, g, b, a) {
+  function fillSquareWorld(x, y, size, halfSize, r, g, b, a = 255) {
     const screenPos = worldToScreen(x - halfSize, y - halfSize)
     fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b, a)
   }
@@ -368,30 +368,8 @@ function createRenderSystem(renderer) {
     render(frameData) {
       renderer.clear()
 
-      if (frameData.isWon) {
-        renderer.fillSquareWorld(
-          frameData.goal.x,
-          frameData.goal.y,
-          frameData.goal.size,
-          frameData.goal.halfSize,
-          255,
-          215,
-          0,
-          255
-        )
-
-        renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180) // TODO: does not work correct as an overlay. Is its place correct?
-      } else {
-        renderer.fillSquareWorld(
-          frameData.goal.x,
-          frameData.goal.y,
-          frameData.goal.size,
-          frameData.goal.halfSize,
-          0,
-          200,
-          0,
-          255
-        )
+      for (const s of frameData.solids) {
+        renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50)
       }
 
       renderer.fillSquareWorld(
@@ -401,12 +379,31 @@ function createRenderSystem(renderer) {
         frameData.player.halfSize,
         100,
         100,
-        100,
-        255
+        100
       )
 
-      for (const s of frameData.solids) {
-        renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50, 255)
+      if (frameData.isWon) {
+        renderer.fillSquareWorld(
+          frameData.goal.x,
+          frameData.goal.y,
+          frameData.goal.size,
+          frameData.goal.halfSize,
+          255,
+          215,
+          0
+        )
+
+        renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180)
+      } else {
+        renderer.fillSquareWorld(
+          frameData.goal.x,
+          frameData.goal.y,
+          frameData.goal.size,
+          frameData.goal.halfSize,
+          0,
+          200,
+          0
+        )
       }
 
       renderer.present()
@@ -495,7 +492,8 @@ export default function game(parent) {
 }
 
 // TODO:
-// should numbers like 255 be an constant?
 // Improve Collision System Architecture
 // show message overlay; add “press R to restart” with Bitmap Font (Recommended for 8-bit)
 // (maybe hard/big change?) Camera smoothing. Interpolate camera position towards player instead of snapping: camera.x = lerp(camera.x, targetX, 1 - exp(-k*dt)) (or simple alpha). Add dead-zone so camera doesn’t micro-jitter.
+
+// should numbers like 255 be an constant?
