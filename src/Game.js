@@ -46,7 +46,7 @@ function respawnPlayer(world) {
   world.player.isGrounded = false // TODO: duplicate
 }
 
-function computeBoundingBoxCollisionData(a, b) {
+function collideAABB(a, b) {
   const combinedHalfSize = a.halfSize + b.halfSize
 
   const dx = a.x - b.x
@@ -55,13 +55,15 @@ function computeBoundingBoxCollisionData(a, b) {
   const absDx = Math.abs(dx)
   const absDy = Math.abs(dy)
 
+  if (absDx >= combinedHalfSize || absDy >= combinedHalfSize) {
+    return null
+  }
+
   return {
-    combinedHalfSize,
     dx,
     dy,
-    absDx,
-    absDy,
-    overlaps: absDx < combinedHalfSize && absDy < combinedHalfSize
+    penetrationX: combinedHalfSize - absDx,
+    penetrationY: combinedHalfSize - absDy
   }
 }
 
@@ -199,22 +201,18 @@ function createCollisionSystem() {
       world.player.isGrounded = false
 
       for (const e of world.solids) {
-        const data = computeBoundingBoxCollisionData(world.player, e)
+        const collision = collideAABB(world.player, e)
+        if (!collision) continue
 
-        if (data.overlaps) {
-          const overlapX = data.combinedHalfSize - data.absDx
-          const overlapY = data.combinedHalfSize - data.absDy
+        if (collision.penetrationX < collision.penetrationY) {
+          world.player.x += collision.dx > 0 ? collision.penetrationX : -collision.penetrationX
+          world.player.vx = 0
+        } else {
+          world.player.y += collision.dy > 0 ? collision.penetrationY : -collision.penetrationY
+          world.player.vy = 0
 
-          if (overlapX < overlapY) {
-            world.player.x += data.dx > 0 ? overlapX : -overlapX
-            world.player.vx = 0
-          } else {
-            world.player.y += data.dy > 0 ? overlapY : -overlapY
-            world.player.vy = 0
-
-            if (data.dy < 0) {
-              world.player.isGrounded = true
-            }
+          if (collision.dy < 0) {
+            world.player.isGrounded = true
           }
         }
       }
@@ -225,7 +223,7 @@ function createCollisionSystem() {
 function createGoalSystem() {
   return {
     update(world) {
-      if (!world.isWon && computeBoundingBoxCollisionData(world.player, world.goal).overlaps) {
+      if (!world.isWon && collideAABB(world.player, world.goal)) {
         world.isWon = true
       }
     }
@@ -492,7 +490,6 @@ export default function game(parent) {
 }
 
 // TODO:
-// Improve Collision System Architecture
 // show message overlay; add “press R to restart” with Bitmap Font (Recommended for 8-bit)
 // (maybe hard/big change?) Camera smoothing. Interpolate camera position towards player instead of snapping: camera.x = lerp(camera.x, targetX, 1 - exp(-k*dt)) (or simple alpha). Add dead-zone so camera doesn’t micro-jitter.
 
