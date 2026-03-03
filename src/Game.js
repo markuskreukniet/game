@@ -18,6 +18,19 @@ function createPxSize(size) {
   return `${size}px`
 }
 
+// good naming
+// TODO: check letters
+const bitmapFont8x8 = {
+  I: [0x7e, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x7e],
+  N: [0x42, 0x62, 0x52, 0x4a, 0x46, 0x42, 0x42, 0x42],
+  O: [0x3c, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3c],
+  U: [0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3c],
+  W: [0x42, 0x42, 0x42, 0x5a, 0x5a, 0x5a, 0x66, 0x42],
+  Y: [0x42, 0x42, 0x24, 0x18, 0x18, 0x18, 0x18, 0x18],
+  "!": [0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x18],
+  " ": [0, 0, 0, 0, 0, 0, 0, 0]
+}
+
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 // TODO: createEntity is too broad for some entities
 function createEntity(x, y, size, vx = null, vy = null, isGrounded = null) {
@@ -284,11 +297,11 @@ function createRenderer(canvas, context, world, camera) {
     return Math.max(0, Math.floor(coord * dpr)) // TODO: duplicate * dpr
   }
 
-  function fillSquareScreen(x, y, size, r, g, b, a) {
-    fillRectScreen(x, y, size, size, r, g, b, a)
+  function fillSquareScreen(x, y, size, r, g, b) {
+    fillRectScreen(x, y, size, size, r, g, b)
   }
 
-  function fillRectScreen(x, y, width, height, r, g, b, a) {
+  function fillRectScreen(x, y, width, height, r, g, b, a = 255) {
     // x/y may be fractional → integer pixels
     const startX = snapToDevicePixel(x)
     const startY = snapToDevicePixel(y)
@@ -337,9 +350,36 @@ function createRenderer(canvas, context, world, camera) {
     }
   }
 
-  function fillSquareWorld(x, y, size, halfSize, r, g, b, a = 255) {
+  function fillSquareWorld(x, y, size, halfSize, r, g, b) {
     const screenPos = worldToScreen(x - halfSize, y - halfSize)
-    fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b, a)
+    fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b)
+  }
+
+  // drawGlyphScreen is good naming
+  function drawGlyphScreen(char, x, y, scale, r, g, b) {
+    for (let row = 0; row < 8; row++) {
+      // row is good naming
+      const rowBits = bitmapFont8x8[char][row] // rowBits is good naming
+      const rowOffset = row * scale // rowOffset is good naming // TODO: should be y + rowOffset
+
+      for (let col = 0; col < 8; col++) {
+        // col is good naming
+        if (rowBits & (1 << (7 - col))) {
+          fillSquareScreen(x + col * scale, y + rowOffset, scale, r, g, b)
+        }
+      }
+    }
+  }
+
+  // drawTextScreen is good naming. scale is also good naming
+  function drawTextScreen(text, x, y, scale, r, g, b) {
+    const glyphAdvance = (8 + 1) * scale // good naming
+    let cursorX = x // good naming
+
+    for (const t of text) {
+      drawGlyphScreen(t, cursorX, y, scale, r, g, b)
+      cursorX += glyphAdvance // TODO: last time of loop not needed
+    }
   }
 
   function clear() {
@@ -357,6 +397,7 @@ function createRenderer(canvas, context, world, camera) {
     clear,
     fillSquareWorld,
     fillRectScreen,
+    drawTextScreen,
     present
   }
 }
@@ -392,6 +433,7 @@ function createRenderSystem(renderer) {
         )
 
         renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180)
+        renderer.drawTextScreen("YOU WIN!", 220, 260, 4, 252, 252, 252)
       } else {
         renderer.fillSquareWorld(
           frameData.goal.x,
