@@ -18,8 +18,7 @@ function createPxSize(size) {
   return `${size}px`
 }
 
-// good naming
-// TODO: check letters
+// TODO: check letters. naming is good
 const bitmapFont8x8 = {
   I: [0x7e, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x7e],
   N: [0x42, 0x62, 0x52, 0x4a, 0x46, 0x42, 0x42, 0x42],
@@ -42,6 +41,15 @@ function createEntity(x, y, size, vx = null, vy = null, isGrounded = null) {
     vx, // px/s
     vy, // px/s
     isGrounded
+  }
+}
+
+function toBox(entity) {
+  return {
+    x: entity.x,
+    y: entity.y,
+    size: entity.size,
+    halfSize: entity.halfSize
   }
 }
 
@@ -113,29 +121,13 @@ function buildFrameData(previous, current, alpha, world) {
   const playerX = interpolate(previous.player.x, current.player.x, alpha)
   const playerY = interpolate(previous.player.y, current.player.y, alpha)
 
-  // TODO: duplicate x, y, size, halfSize
   return {
     renderWidth: world.width,
     renderHeight: world.height,
     isWon: world.isWon,
-    goal: {
-      x: world.goal.x,
-      y: world.goal.y,
-      size: world.goal.size,
-      halfSize: world.goal.halfSize
-    },
-    solids: world.solids.map((s) => ({
-      x: s.x,
-      y: s.y,
-      size: s.size,
-      halfSize: s.halfSize
-    })),
-    player: {
-      x: playerX,
-      y: playerY,
-      size: world.player.size,
-      halfSize: world.player.halfSize
-    }
+    goal: toBox(world.goal),
+    solids: world.solids.map(toBox),
+    player: createEntity(playerX, playerY, world.player.size)
   }
 }
 
@@ -355,30 +347,26 @@ function createRenderer(canvas, context, world, camera) {
     fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b)
   }
 
-  // drawGlyphScreen is good naming
   function drawGlyphScreen(char, x, y, scale, r, g, b) {
     for (let row = 0; row < 8; row++) {
-      // row is good naming
-      const rowBits = bitmapFont8x8[char][row] // rowBits is good naming
-      const rowOffset = row * scale // rowOffset is good naming // TODO: should be y + rowOffset
+      const rowBits = bitmapFont8x8[char][row]
+      const rowY = y + row * scale
 
       for (let col = 0; col < 8; col++) {
-        // col is good naming
         if (rowBits & (1 << (7 - col))) {
-          fillSquareScreen(x + col * scale, y + rowOffset, scale, r, g, b)
+          fillSquareScreen(x + col * scale, rowY, scale, r, g, b)
         }
       }
     }
   }
 
-  // drawTextScreen is good naming. scale is also good naming
   function drawTextScreen(text, x, y, scale, r, g, b) {
-    const glyphAdvance = (8 + 1) * scale // good naming
-    let cursorX = x // good naming
+    const glyphAdvance = (8 + 1) * scale
+    let cursorX = x
 
     for (const t of text) {
       drawGlyphScreen(t, cursorX, y, scale, r, g, b)
-      cursorX += glyphAdvance // TODO: last time of loop not needed
+      cursorX += glyphAdvance // final increment is harmless and keeps the loop simple
     }
   }
 
@@ -532,7 +520,6 @@ export default function game(parent) {
 }
 
 // TODO:
-// show message overlay; add “press R to restart” with Bitmap Font (Recommended for 8-bit)
 // (maybe hard/big change?) Camera smoothing. Interpolate camera position towards player instead of snapping: camera.x = lerp(camera.x, targetX, 1 - exp(-k*dt)) (or simple alpha). Add dead-zone so camera doesn’t micro-jitter.
 
 // should numbers like 255 be an constant?
