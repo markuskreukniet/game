@@ -19,7 +19,7 @@ function createPxSize(size) {
 }
 
 // TODO: check letters. naming is good
-const bitmapFont8x8 = {
+const bitmapFont8x8 = Object.freeze({
   I: [0x7e, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x7e],
   N: [0x42, 0x62, 0x52, 0x4a, 0x46, 0x42, 0x42, 0x42],
   O: [0x3c, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3c],
@@ -28,19 +28,21 @@ const bitmapFont8x8 = {
   Y: [0x42, 0x42, 0x24, 0x18, 0x18, 0x18, 0x18, 0x18],
   "!": [0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x18],
   " ": [0, 0, 0, 0, 0, 0, 0, 0]
-}
+})
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 // TODO: createEntity is too broad for some entities
-function createEntity(x, y, size, vx = null, vy = null, isGrounded = null) {
+function createEntity(x, y, size, vx = null, vy = null, isGrounded = null, jumpBufferTime = null, coyoteTime = null) {
   return {
     x,
     y,
     size,
     halfSize: size / 2,
     vx, // px/s
-    vy, // px/s
-    isGrounded
+    vy, // px/s // TODO: is it px/s?
+    isGrounded,
+    jumpBufferTime,
+    coyoteTime
   }
 }
 
@@ -65,6 +67,8 @@ function respawnPlayer(world) {
   world.player.vx = 0 // TODO: duplicate
   world.player.vy = 0 // TODO: duplicate
   world.player.isGrounded = false // TODO: duplicate
+  world.player.jumpBufferTime = 0
+  world.player.coyoteTime = 0
 }
 
 function collideAABB(a, b) {
@@ -141,21 +145,26 @@ function createInputSystem() {
     left: false,
     right: false,
     jump: false,
+    jumpPressed: false,
     reset: false
   }
 
   document.addEventListener("keydown", (e) => {
     if (e.code === arrowLeft) input.left = true
     if (e.code === arrowRight) input.right = true
-    if (e.code === arrowUp) input.jump = true
     if (e.code === keyR) input.reset = true // TODO: make sure it triggers once
+
+    if (e.code === arrowUp) {
+      if (!input.jump) input.jumpPressed = true
+      input.jump = true
+    }
   })
 
   document.addEventListener("keyup", (e) => {
     if (e.code === arrowLeft) input.left = false
     if (e.code === arrowRight) input.right = false
-    if (e.code === arrowUp) input.jump = false
     if (e.code === keyR) input.reset = false
+    if (e.code === arrowUp) input.jump = false
   })
 
   return { input }
@@ -187,15 +196,45 @@ function createMovementSystem() {
 }
 
 function createPhysicsSystem() {
+  // TODO: these consts to a config
+  const jumpVelocity = -350
+  const gravity = 800
+  const coyoteTime = 0.08 // s
+  const jumpBufferTime = 0.1 // s
+  const jumpCutMultiplier = 0.5
+
   return {
     update(world, input, dt) {
-      if (input.jump && world.player.isGrounded) {
-        world.player.vy = -350 // px/s
+      const p = world.player
+
+      if (input.jumpPressed) {
+        p.jumpBufferTime = jumpBufferTime
+      } else {
+        p.jumpBufferTime -= dt
       }
 
-      world.player.vy += 800 * dt // px/s²
-      world.player.x += world.player.vx * dt
-      world.player.y += world.player.vy * dt
+      if (p.isGrounded) {
+        p.coyoteTime = coyoteTime
+      } else {
+        p.coyoteTime -= dt
+      }
+
+      if (p.jumpBufferTime > 0 && p.coyoteTime > 0) {
+        p.vy = jumpVelocity // px/s
+        p.isGrounded = false
+        p.jumpBufferTime = 0
+        p.coyoteTime = 0
+      }
+
+      if (!input.jump && p.vy < 0) {
+        p.vy *= jumpCutMultiplier
+      }
+
+      p.vy += gravity * dt // px/s²
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+
+      input.jumpPressed = false
     }
   }
 }
@@ -520,6 +559,9 @@ export default function game(parent) {
 }
 
 // TODO:
+// add and use a config
+// add fall multiplier?
 // (maybe hard/big change?) Camera smoothing. Interpolate camera position towards player instead of snapping: camera.x = lerp(camera.x, targetX, 1 - exp(-k*dt)) (or simple alpha). Add dead-zone so camera doesn’t micro-jitter.
+// input reset should trigger once
 
 // should numbers like 255 be an constant?
