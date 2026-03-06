@@ -242,21 +242,22 @@ function createPhysicsSystem() {
 function createCollisionSystem() {
   return {
     update(world) {
-      world.player.isGrounded = false
+      const p = world.player
+      p.isGrounded = false
 
-      for (const e of world.solids) {
-        const collision = collideAABB(world.player, e)
+      for (const s of world.solids) {
+        const collision = collideAABB(p, s)
         if (!collision) continue
 
         if (collision.penetrationX < collision.penetrationY) {
-          world.player.x += collision.dx > 0 ? collision.penetrationX : -collision.penetrationX
-          world.player.vx = 0
+          p.x += collision.dx > 0 ? collision.penetrationX : -collision.penetrationX
+          p.vx = 0
         } else {
-          world.player.y += collision.dy > 0 ? collision.penetrationY : -collision.penetrationY
-          world.player.vy = 0
+          p.y += collision.dy > 0 ? collision.penetrationY : -collision.penetrationY
+          p.vy = 0
 
           if (collision.dy < 0) {
-            world.player.isGrounded = true
+            p.isGrounded = true
           }
         }
       }
@@ -294,7 +295,7 @@ function createWorldConstraintSystem(world) {
 }
 
 function createCameraSystem(camera) {
-  const followWeight = 0.2
+  const followWeight = 0.2 // TODO: base it on frames?
 
   return {
     update(target) {
@@ -572,4 +573,5 @@ export default function game(parent) {
 // add fall multiplier?
 // input reset should trigger once
 
+// do more like this const p = world.player. + remove some abstraction like requestAnimationFrameLoop()?
 // should numbers like 255 be an constant? don't use / 2, but use * 0.5. Abstract * dpi and * dt?
