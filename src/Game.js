@@ -293,6 +293,17 @@ function createWorldConstraintSystem(world) {
   }
 }
 
+function createCameraSystem(camera) {
+  const followWeight = 0.2
+
+  return {
+    update(target) {
+      camera.x = interpolate(camera.x, target.x, followWeight)
+      camera.y = interpolate(camera.y, target.y, followWeight)
+    }
+  }
+}
+
 function createRenderer(canvas, context, world, camera) {
   const screenCenterY = world.height / 2
 
@@ -501,6 +512,7 @@ export default function game(parent) {
   const collisionSystem = createCollisionSystem()
   const goalSystem = createGoalSystem()
   const worldConstraintSystem = createWorldConstraintSystem(world)
+  const cameraSystem = createCameraSystem(camera)
   const renderer = createRenderer(canvas, context, world, camera)
   const renderSystem = createRenderSystem(renderer)
 
@@ -539,10 +551,7 @@ export default function game(parent) {
 
     if (renderAccumulator >= targetFrameMs) {
       const frameData = buildFrameData(previousSnapshot, currentSnapshot, accumulator / targetFrameMs, world)
-
-      camera.x = frameData.player.x
-      camera.y = frameData.player.y
-
+      cameraSystem.update(frameData.player)
       renderSystem.render(frameData)
 
       renderAccumulator -= targetFrameMs
@@ -561,7 +570,6 @@ export default function game(parent) {
 // TODO:
 // add and use a config
 // add fall multiplier?
-// (maybe hard/big change?) Camera smoothing. Interpolate camera position towards player instead of snapping: camera.x = lerp(camera.x, targetX, 1 - exp(-k*dt)) (or simple alpha). Add dead-zone so camera doesn’t micro-jitter.
 // input reset should trigger once
 
-// should numbers like 255 be an constant?
+// should numbers like 255 be an constant? don't use / 2, but use * 0.5. Abstract * dpi and * dt?
