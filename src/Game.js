@@ -32,17 +32,29 @@ const bitmapFont8x8 = Object.freeze({
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 // TODO: createEntity is too broad for some entities
-function createEntity(x, y, size, vx = null, vy = null, isGrounded = null, jumpBufferTime = null, coyoteTime = null) {
+function createEntity(
+  x,
+  y,
+  size,
+  vx = null,
+  vy = null,
+  isGrounded = null,
+  jumpBufferTime = null,
+  coyoteTime = null,
+  oneWayPlatform = null
+) {
   return {
     x,
     y,
+    prevY: y, // TODO: should be y as initial value, but not every entity should have prevY
     size,
     halfSize: size / 2,
     vx, // px/s
     vy, // px/s // TODO: is it px/s?
     isGrounded,
     jumpBufferTime,
-    coyoteTime
+    coyoteTime,
+    oneWayPlatform
   }
 }
 
@@ -115,7 +127,12 @@ function createWorld() {
     spawn,
     killPlaneY: 900,
     player: createEntity(spawn.x, spawn.y, size, 0, 0, false),
-    solids: [createEntity(0, 200, size), createEntity(-100, 180, size), createEntity(50, 530, 500)],
+    solids: [
+      createEntity(0, 200, size),
+      createEntity(-100, 180, size),
+      createEntity(20, 90, size, null, null, null, null, null, true),
+      createEntity(50, 530, 500)
+    ],
     goal: createEntity(100, 150, size),
     isWon: false
   }
@@ -197,7 +214,7 @@ function createMovementSystem() {
 
 function createPhysicsSystem() {
   // TODO: these consts to a config
-  const jumpVelocity = -350
+  const jumpVelocity = -450
   const gravity = 800
   const coyoteTime = 0.08 // s
   const jumpBufferTime = 0.1 // s
@@ -230,6 +247,7 @@ function createPhysicsSystem() {
         p.vy *= jumpCutMultiplier
       }
 
+      p.prevY = p.y
       p.vy += gravity * dt // px/s²
       p.x += p.vx * dt
       p.y += p.vy * dt
@@ -240,23 +258,28 @@ function createPhysicsSystem() {
 }
 
 function createCollisionSystem() {
+  const landingTolerance = 1 // pixels
+
   return {
     update(world) {
-      world.player.isGrounded = false
+      const p = world.player
+      p.isGrounded = false
+      const prevBottom = p.prevY + p.halfSize
 
-      for (const e of world.solids) {
-        const collision = collideAABB(world.player, e)
+      for (const s of world.solids) {
+        const collision = collideAABB(p, s)
         if (!collision) continue
+        if (s.oneWayPlatform && prevBottom > s.y - s.halfSize + landingTolerance) continue
 
         if (collision.penetrationX < collision.penetrationY) {
-          world.player.x += collision.dx > 0 ? collision.penetrationX : -collision.penetrationX
-          world.player.vx = 0
+          p.x += collision.dx > 0 ? collision.penetrationX : -collision.penetrationX
+          p.vx = 0
         } else {
-          world.player.y += collision.dy > 0 ? collision.penetrationY : -collision.penetrationY
-          world.player.vy = 0
+          p.y += collision.dy > 0 ? collision.penetrationY : -collision.penetrationY
+          p.vy = 0
 
           if (collision.dy < 0) {
-            world.player.isGrounded = true
+            p.isGrounded = true
           }
         }
       }
@@ -336,7 +359,7 @@ function createRenderer(canvas, context, world, camera) {
   }
 
   function snapToDevicePixel(coord) {
-    return Math.max(0, Math.floor(coord * dpr)) // TODO: duplicate * dpr
+    return Math.max(0, Math.floor(coord * dpr))
   }
 
   function fillSquareScreen(x, y, size, r, g, b) {
@@ -572,4 +595,5 @@ export default function game(parent) {
 // add fall multiplier?
 // input reset should trigger once
 
-// should numbers like 255 be an constant? don't use / 2, but use * 0.5. Abstract * dpi and * dt?
+// do more like this const p = world.player. + remove some abstraction like requestAnimationFrameLoop()?
+// should numbers like 255 be an constant? don't use / 2, but use * 0.5. Abstract * dpi and * dt duplicates?
