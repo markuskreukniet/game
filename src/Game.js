@@ -31,33 +31,35 @@ const bitmapFont8x8 = Object.freeze({
 })
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
-// TODO: createEntity is too broad for some entities
-function createEntity(
-  x,
-  y,
-  size,
-  vx = null,
-  vy = null,
-  isGrounded = null,
-  jumpBufferTime = null,
-  coyoteTime = null,
-  oneWayPlatform = null
-) {
+function createEntity(x, y, size) {
   return {
     x,
     y,
-    prevY: y, // TODO: should be y as initial value, but not every entity should have prevY
+    prevY: y,
     size,
-    halfSize: size / 2,
-    vx, // px/s
-    vy, // px/s // TODO: is it px/s?
-    isGrounded,
-    jumpBufferTime,
-    coyoteTime,
+    halfSize: size / 2
+  }
+}
+
+function createPlayer(x, y, size) {
+  return {
+    ...createEntity(x, y, size),
+    vx: 0, // px/s
+    vy: 0, // px/s // TODO: is it px/s?
+    isGrounded: false, // TODO: should start on false? or from param?
+    jumpBufferTime: 0,
+    coyoteTime: 0
+  }
+}
+
+function createSolid(x, y, size, oneWayPlatform) {
+  return {
+    ...createEntity(x, y, size),
     oneWayPlatform
   }
 }
 
+// TODO: same as createEntity, so remove it?
 function toBox(entity) {
   return {
     x: entity.x,
@@ -126,12 +128,12 @@ function createWorld() {
     minX: -maxX,
     spawn,
     killPlaneY: 900,
-    player: createEntity(spawn.x, spawn.y, size, 0, 0, false),
+    player: createPlayer(spawn.x, spawn.y, size),
     solids: [
-      createEntity(0, 200, size),
-      createEntity(-100, 180, size),
-      createEntity(20, 90, size, null, null, null, null, null, true),
-      createEntity(50, 530, 500)
+      createSolid(0, 200, size, false),
+      createSolid(-100, 180, size, false),
+      createSolid(20, 90, size, true),
+      createSolid(50, 530, 500, false)
     ],
     goal: createEntity(100, 150, size),
     isWon: false
@@ -148,7 +150,7 @@ function buildFrameData(previous, current, alpha, world) {
     isWon: world.isWon,
     goal: toBox(world.goal),
     solids: world.solids.map(toBox),
-    player: createEntity(playerX, playerY, world.player.size)
+    player: createPlayer(playerX, playerY, world.player.size)
   }
 }
 
@@ -216,8 +218,8 @@ function createPhysicsSystem() {
   // TODO: these consts to a config
   const jumpVelocity = -450
   const gravity = 800
-  const coyoteTime = 0.08 // s
-  const jumpBufferTime = 0.1 // s
+  const coyoteTime = 0.08 // s // TODO: base it on frames?
+  const jumpBufferTime = 0.1 // s // TODO: base it on frames?
   const jumpCutMultiplier = 0.5
 
   return {
@@ -580,14 +582,10 @@ export default function game(parent) {
       renderAccumulator -= targetFrameMs
     }
 
-    requestAnimationFrameLoop()
-  }
-
-  function requestAnimationFrameLoop() {
     requestAnimationFrame(loop)
   }
 
-  requestAnimationFrameLoop()
+  requestAnimationFrame(loop)
 }
 
 // TODO:
@@ -595,5 +593,5 @@ export default function game(parent) {
 // add fall multiplier?
 // input reset should trigger once
 
-// do more like this const p = world.player. + remove some abstraction like requestAnimationFrameLoop()?
+// do more like this const p = world.player. + remove some abstraction?
 // should numbers like 255 be an constant? don't use / 2, but use * 0.5. Abstract * dpi and * dt duplicates?
