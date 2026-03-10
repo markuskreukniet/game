@@ -26,8 +26,8 @@ const bitmapFont8x8 = Object.freeze({
   U: [0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3c],
   W: [0x42, 0x42, 0x42, 0x5a, 0x5a, 0x5a, 0x66, 0x42],
   Y: [0x42, 0x42, 0x24, 0x18, 0x18, 0x18, 0x18, 0x18],
-  "!": [0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x18],
-  " ": [0, 0, 0, 0, 0, 0, 0, 0]
+  '!': [0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x18],
+  ' ': [0, 0, 0, 0, 0, 0, 0, 0]
 })
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
@@ -35,17 +35,30 @@ function createEntity(x, y, size) {
   return {
     x,
     y,
-    prevY: y,
     size,
     halfSize: size / 2
+  }
+}
+
+function createPrevPosition(prevX, prevY) {
+  return {
+    prevX,
+    prevY
+  }
+}
+
+function createVelocity(vx, vy) {
+  return {
+    vx, // px/s
+    vy // px/s // TODO: is it px/s?
   }
 }
 
 function createPlayer(x, y, size) {
   return {
     ...createEntity(x, y, size),
-    vx: 0, // px/s
-    vy: 0, // px/s // TODO: is it px/s?
+    ...createPrevPosition(x, y),
+    ...createVelocity(0, 0),
     isGrounded: false, // TODO: should start on false? or from param?
     jumpBufferTime: 0,
     coyoteTime: 0
@@ -56,6 +69,18 @@ function createSolid(x, y, size, oneWayPlatform) {
   return {
     ...createEntity(x, y, size),
     oneWayPlatform
+  }
+}
+
+function createMovingSolid(x, y, size, oneWayPlatform, vx, vy, minX = x, maxX = x, minY = y, maxY = y) {
+  return {
+    ...createSolid(x, y, size, oneWayPlatform),
+    ...createPrevPosition(x, y),
+    ...createVelocity(vx, vy),
+    minX,
+    maxX,
+    minY,
+    maxY
   }
 }
 
@@ -135,6 +160,7 @@ function createWorld() {
       createSolid(20, 90, size, true),
       createSolid(50, 530, 500, false)
     ],
+    movingSolids: [createMovingSolid(-150, 120, 50, false, -60, -60, -200, -100, 60, 130)],
     goal: createEntity(100, 150, size),
     isWon: false
   }
@@ -150,15 +176,16 @@ function buildFrameData(previous, current, alpha, world) {
     isWon: world.isWon,
     goal: toBox(world.goal),
     solids: world.solids.map(toBox),
+    movingSolids: world.movingSolids.map(toBox),
     player: createPlayer(playerX, playerY, world.player.size)
   }
 }
 
 function createInputSystem() {
-  const arrowLeft = "ArrowLeft"
-  const arrowRight = "ArrowRight"
-  const arrowUp = "ArrowUp"
-  const keyR = "KeyR"
+  const arrowLeft = 'ArrowLeft'
+  const arrowRight = 'ArrowRight'
+  const arrowUp = 'ArrowUp'
+  const keyR = 'KeyR'
 
   const input = {
     left: false,
@@ -168,7 +195,7 @@ function createInputSystem() {
     reset: false
   }
 
-  document.addEventListener("keydown", (e) => {
+  document.addEventListener('keydown', (e) => {
     if (e.code === arrowLeft) input.left = true
     if (e.code === arrowRight) input.right = true
     if (e.code === keyR) input.reset = true // TODO: make sure it triggers once
@@ -179,7 +206,7 @@ function createInputSystem() {
     }
   })
 
-  document.addEventListener("keyup", (e) => {
+  document.addEventListener('keyup', (e) => {
     if (e.code === arrowLeft) input.left = false
     if (e.code === arrowRight) input.right = false
     if (e.code === keyR) input.reset = false
@@ -187,6 +214,36 @@ function createInputSystem() {
   })
 
   return { input }
+}
+
+function createMovingSolidSystem() {
+  return {
+    update(world, dt) {
+      for (const s of world.movingSolids) {
+        s.prevX = s.x
+        s.prevY = s.y
+
+        s.x += s.vx * dt
+        s.y += s.vy * dt
+
+        if (s.x < s.minX) {
+          s.x = s.minX
+          s.vx *= -1
+        } else if (s.x > s.maxX) {
+          s.x = s.maxX
+          s.vx *= -1
+        }
+
+        if (s.y < s.minY) {
+          s.y = s.minY
+          s.vy *= -1
+        } else if (s.y > s.maxY) {
+          s.y = s.maxY
+          s.vy *= -1
+        }
+      }
+    }
+  }
 }
 
 function createMovementSystem() {
@@ -259,8 +316,31 @@ function createPhysicsSystem() {
   }
 }
 
+function resolvePlayerSolidCollision(player, solid, prevPlayerBottom, landingTolerance, carriesPlayer = false) {
+  if (solid.oneWayPlatform && prevPlayerBottom > solid.y - solid.halfSize + landingTolerance) return
+  const collision = collideAABB(player, solid)
+  if (!collision) return
+
+  if (collision.penetrationX < collision.penetrationY) {
+    player.x += collision.dx > 0 ? collision.penetrationX : -collision.penetrationX
+    player.vx = 0
+  } else {
+    player.y += collision.dy > 0 ? collision.penetrationY : -collision.penetrationY
+    player.vy = 0
+
+    if (collision.dy < 0) {
+      player.isGrounded = true
+
+      if (carriesPlayer) {
+        player.x += solid.x - solid.prevX
+        player.y += solid.y - solid.prevY
+      }
+    }
+  }
+}
+
 function createCollisionSystem() {
-  const landingTolerance = 1 // pixels
+  const landingTolerance = 1 // pixels // TODO: add comment. Is it for rounding bugs?
 
   return {
     update(world) {
@@ -269,21 +349,10 @@ function createCollisionSystem() {
       const prevBottom = p.prevY + p.halfSize
 
       for (const s of world.solids) {
-        const collision = collideAABB(p, s)
-        if (!collision) continue
-        if (s.oneWayPlatform && prevBottom > s.y - s.halfSize + landingTolerance) continue
-
-        if (collision.penetrationX < collision.penetrationY) {
-          p.x += collision.dx > 0 ? collision.penetrationX : -collision.penetrationX
-          p.vx = 0
-        } else {
-          p.y += collision.dy > 0 ? collision.penetrationY : -collision.penetrationY
-          p.vy = 0
-
-          if (collision.dy < 0) {
-            p.isGrounded = true
-          }
-        }
+        resolvePlayerSolidCollision(p, s, prevBottom, landingTolerance)
+      }
+      for (const s of world.movingSolids) {
+        resolvePlayerSolidCollision(p, s, prevBottom, landingTolerance, true)
       }
     }
   }
@@ -454,7 +523,7 @@ function createRenderer(canvas, context, world, camera) {
   }
 
   resize()
-  window.addEventListener("resize", resize) // resize independent of main loop
+  window.addEventListener('resize', resize) // resize independent of main loop
 
   return {
     clear,
@@ -471,6 +540,9 @@ function createRenderSystem(renderer) {
       renderer.clear()
 
       for (const s of frameData.solids) {
+        renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50)
+      }
+      for (const s of frameData.movingSolids) {
         renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50)
       }
 
@@ -496,7 +568,7 @@ function createRenderSystem(renderer) {
         )
 
         renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180)
-        renderer.drawTextScreen("YOU WIN!", 220, 260, 4, 252, 252, 252)
+        renderer.drawTextScreen('YOU WIN!', 220, 260, 4, 252, 252, 252)
       } else {
         renderer.fillSquareWorld(
           frameData.goal.x,
@@ -521,8 +593,8 @@ export default function game(parent) {
   const maxDeltaMs = targetFrameMs * 2
   const deltaS = targetFrameMs / SECOND_IN_MS
 
-  const canvas = createElement("canvas", parent)
-  const context = canvas.getContext("2d")
+  const canvas = createElement('canvas', parent)
+  const context = canvas.getContext('2d')
 
   const camera = {
     x: 0,
@@ -532,6 +604,7 @@ export default function game(parent) {
   const world = createWorld()
 
   const inputSystem = createInputSystem()
+  const movingSolidSystem = createMovingSolidSystem()
   const movementSystem = createMovementSystem()
   const physicsSystem = createPhysicsSystem()
   const collisionSystem = createCollisionSystem()
@@ -563,6 +636,7 @@ export default function game(parent) {
       if (world.isWon && inputSystem.input.reset) {
         resetWorld(world)
       } else {
+        movingSolidSystem.update(world, deltaS)
         movementSystem.update(world, inputSystem.input, deltaS)
         physicsSystem.update(world, inputSystem.input, deltaS)
         collisionSystem.update(world)
@@ -587,11 +661,3 @@ export default function game(parent) {
 
   requestAnimationFrame(loop)
 }
-
-// TODO:
-// add and use a config
-// add fall multiplier?
-// input reset should trigger once
-
-// do more like this const p = world.player. + remove some abstraction?
-// should numbers like 255 be an constant? don't use / 2, but use * 0.5. Abstract * dpi and * dt duplicates?
