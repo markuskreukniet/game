@@ -2,7 +2,6 @@
 
 ## TODO:
 
-- die when solid presses you down
 - add and use a config
 - add fall multiplier?
 - input reset should trigger once

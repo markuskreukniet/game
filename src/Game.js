@@ -72,15 +72,15 @@ function createSolid(x, y, size, oneWayPlatform) {
   }
 }
 
-function createMovingSolid(x, y, size, oneWayPlatform, vx, vy, minX = x, maxX = x, minY = y, maxY = y) {
+function createMovingSolid(x, y, size, oneWayPlatform, vx, vy, minX = null, maxX = null, minY = null, maxY = null) {
   return {
     ...createSolid(x, y, size, oneWayPlatform),
     ...createPrevPosition(x, y),
     ...createVelocity(vx, vy),
-    minX,
-    maxX,
-    minY,
-    maxY
+    minX: minX ?? x,
+    maxX: maxX ?? x,
+    minY: minY ?? y,
+    maxY: maxY ?? y
   }
 }
 
@@ -126,6 +126,7 @@ function collideAABB(a, b) {
   return {
     dx,
     dy,
+    combinedHalfSize,
     penetrationX: combinedHalfSize - absDx,
     penetrationY: combinedHalfSize - absDy
   }
@@ -160,7 +161,10 @@ function createWorld() {
       createSolid(20, 90, size, true),
       createSolid(50, 530, 500, false)
     ],
-    movingSolids: [createMovingSolid(-150, 120, 50, false, -60, -60, -200, -100, 60, 130)],
+    movingSolids: [
+      createMovingSolid(-150, 120, 50, false, -60, -60, -200, -100, 60, 130),
+      createMovingSolid(200, 150, 50, false, 0, -400, null, null, 100, 200) // TODO: bug when standing/jumping on the left I get pushed through the left
+    ],
     goal: createEntity(100, 150, size),
     isWon: false
   }
@@ -303,57 +307,99 @@ function createPhysicsSystem() {
       }
 
       if (!input.jump && p.vy < 0) {
+        // TODO: to single line if and also on other places
         p.vy *= jumpCutMultiplier
       }
 
+      p.prevX = p.x
       p.prevY = p.y
       p.vy += gravity * dt // px/s²
-      p.x += p.vx * dt
-      p.y += p.vy * dt
 
       input.jumpPressed = false
     }
   }
 }
 
-function resolvePlayerSolidCollision(player, solid, prevPlayerBottom, landingTolerance, carriesPlayer = false) {
-  if (solid.oneWayPlatform && prevPlayerBottom > solid.y - solid.halfSize + landingTolerance) return
-  const collision = collideAABB(player, solid)
-  if (!collision) return
-
-  if (collision.penetrationX < collision.penetrationY) {
-    player.x += collision.dx > 0 ? collision.penetrationX : -collision.penetrationX
-    player.vx = 0
-  } else {
-    player.y += collision.dy > 0 ? collision.penetrationY : -collision.penetrationY
-    player.vy = 0
-
-    if (collision.dy < 0) {
-      player.isGrounded = true
-
-      if (carriesPlayer) {
-        player.x += solid.x - solid.prevX
-        player.y += solid.y - solid.prevY
-      }
-    }
-  }
-}
-
 function createCollisionSystem() {
-  const landingTolerance = 1 // pixels // TODO: add comment. Is it for rounding bugs?
+  const contactTolerance = 1 // pixels // prevents misclassification from precision and timestep error
 
   return {
-    update(world) {
+    update(world, dt) {
+      let blockedLeft = false
+      let blockedRight = false
+      let blockedTop = false
+      let blockedBottom = false
+
       const p = world.player
       p.isGrounded = false
       const prevBottom = p.prevY + p.halfSize
 
-      for (const s of world.solids) {
-        resolvePlayerSolidCollision(p, s, prevBottom, landingTolerance)
+      function handlePlayerSolidCollision(player, solid, solidPrevX, solidPrevY, applyPlatformMotion = false) {
+        if (solid.oneWayPlatform && prevBottom > solidPrevY - solid.halfSize + contactTolerance) return
+        const collision = collideAABB(player, solid)
+        if (!collision) return
+
+        // player was above solid (prev)
+        if (player.prevY + player.halfSize <= solidPrevY - solid.halfSize + contactTolerance) {
+          player.y = solid.y - solid.halfSize - player.halfSize
+          blockedBottom = true
+          player.vy = 0 // TODO: duplicate
+          player.isGrounded = true
+          if (applyPlatformMotion) {
+            player.x += solid.x - solid.prevX
+            player.y += solid.y - solid.prevY
+          }
+        }
+        // player was below solid (prev)
+        else if (player.prevY - player.halfSize >= solidPrevY + solid.halfSize - contactTolerance) {
+          player.y = solid.y + collision.combinedHalfSize
+          blockedTop = true
+          player.vy = 0 // TODO: moving solids that should act as a catapult does cancel that?
+        }
+        // player was left of solid (prev)
+        else if (player.prevX + player.halfSize <= solidPrevX - solid.halfSize + contactTolerance) {
+          player.x = solid.x - solid.halfSize - player.halfSize // TODO: duplicate
+          blockedRight = true
+          player.vx = 0 // TODO: duplicate
+        }
+        // player was right of solid (prev)
+        else if (player.prevX - player.halfSize >= solidPrevX + solid.halfSize - contactTolerance) {
+          player.x = solid.x + collision.combinedHalfSize
+          blockedLeft = true
+          player.vx = 0
+        }
+        // Fallback: player already overlaps the solid, making collision direction ambiguous
+        else if (collision.penetrationX < collision.penetrationY) {
+          if (collision.dx > 0) {
+            player.x += collision.penetrationX
+          } else if (collision.dx < 0 || player.prevX < solidPrevX) {
+            player.x -= collision.penetrationX
+          } else {
+            player.x += collision.penetrationX
+          }
+
+          player.vx = 0
+        } else {
+          if (collision.dy > 0) {
+            player.y += collision.penetrationY
+          } else if (collision.dy < 0 || player.prevY < solidPrevY) {
+            player.y -= collision.penetrationY
+            player.isGrounded = true
+          } else {
+            player.y += collision.penetrationY
+          }
+
+          player.vy = 0
+        }
       }
-      for (const s of world.movingSolids) {
-        resolvePlayerSolidCollision(p, s, prevBottom, landingTolerance, true)
-      }
+
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+
+      for (const s of world.solids) handlePlayerSolidCollision(p, s, s.x, s.y)
+      for (const s of world.movingSolids) handlePlayerSolidCollision(p, s, s.prevX, s.prevY, true)
+
+      if ((blockedLeft && blockedRight) || (blockedTop && blockedBottom)) respawnPlayer(world)
     }
   }
 }
@@ -639,7 +685,7 @@ export default function game(parent) {
         movingSolidSystem.update(world, deltaS)
         movementSystem.update(world, inputSystem.input, deltaS)
         physicsSystem.update(world, inputSystem.input, deltaS)
-        collisionSystem.update(world)
+        collisionSystem.update(world, deltaS)
         goalSystem.update(world)
         worldConstraintSystem.update(world)
       }
