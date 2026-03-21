@@ -60,6 +60,7 @@ function createPlayer(x, y, size) {
     ...createPrevPosition(x, y),
     ...createVelocity(0, 0),
     isGrounded: false, // TODO: should start on false? or from param?
+    jumpActive: false,
     jumpBufferTime: 0,
     coyoteTime: 0
   }
@@ -106,6 +107,7 @@ function respawnPlayer(world) {
   world.player.vx = 0 // TODO: duplicate
   world.player.vy = 0 // TODO: duplicate
   world.player.isGrounded = false // TODO: duplicate
+  world.player.jumpActive = false
   world.player.jumpBufferTime = 0
   world.player.coyoteTime = 0
 }
@@ -159,11 +161,12 @@ function createWorld() {
       createSolid(0, 200, size, false),
       createSolid(-100, 180, size, false),
       createSolid(20, 90, size, true),
-      createSolid(50, 530, 500, false)
+      createSolid(50, 530, 500, false),
+      createSolid(250, 100, size, false)
     ],
     movingSolids: [
       createMovingSolid(-150, 120, 50, false, -60, -60, -200, -100, 60, 130),
-      createMovingSolid(200, 150, 50, false, 0, -400, null, null, 100, 200) // TODO: bug when standing/jumping on the left I get pushed through the left
+      createMovingSolid(200, 150, 50, false, 0, -400, null, null, 100, 300)
     ],
     goal: createEntity(100, 150, size),
     isWon: false
@@ -304,9 +307,10 @@ function createPhysicsSystem() {
         p.isGrounded = false
         p.jumpBufferTime = 0
         p.coyoteTime = 0
+        p.jumpActive = true
       }
 
-      if (!input.jump && p.vy < 0) {
+      if (!input.jump && p.vy < 0 && p.jumpActive) {
         // TODO: to single line if and also on other places
         p.vy *= jumpCutMultiplier
       }
@@ -343,11 +347,14 @@ function createCollisionSystem() {
         if (player.prevY + player.halfSize <= solidPrevY - solid.halfSize + contactTolerance) {
           player.y = solid.y - solid.halfSize - player.halfSize
           blockedBottom = true
-          player.vy = 0 // TODO: duplicate
           player.isGrounded = true
+          player.jumpActive = false
           if (applyPlatformMotion) {
             player.x += solid.x - solid.prevX
             player.y += solid.y - solid.prevY
+            player.vy = Math.min(solid.vy, 0)
+          } else {
+            player.vy = 0 // TODO: duplicate
           }
         }
         // player was below solid (prev)
@@ -385,6 +392,7 @@ function createCollisionSystem() {
           } else if (collision.dy < 0 || player.prevY < solidPrevY) {
             player.y -= collision.penetrationY
             player.isGrounded = true
+            player.jumpActive = false // TODO: duplicate with grounded
           } else {
             player.y += collision.penetrationY
           }
@@ -396,8 +404,9 @@ function createCollisionSystem() {
       p.x += p.vx * dt
       p.y += p.vy * dt
 
-      for (const s of world.solids) handlePlayerSolidCollision(p, s, s.x, s.y)
+      // Resolve moving platforms first to preserve accurate collision classification
       for (const s of world.movingSolids) handlePlayerSolidCollision(p, s, s.prevX, s.prevY, true)
+      for (const s of world.solids) handlePlayerSolidCollision(p, s, s.x, s.y)
 
       if ((blockedLeft && blockedRight) || (blockedTop && blockedBottom)) respawnPlayer(world)
     }
