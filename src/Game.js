@@ -1,12 +1,4 @@
-// Why are some values in px/s²? An example:
-// In 'vy += gravity * dt;' is vy in px/s and dt in s.
-// gravity * dt = vy. gravity * s = px/s
-// gravity = px/s / s. gravity = px/s * 1/s. gravity = px/s²
-
-// Why are some values in px/s? An example:
-// In 'brakingDelta = groundDeceleration * dt;' is groundDeceleration in px/s² and dt in s.
-// groundDeceleration * dt = brakingDelta. px/s² * s = brakingDelta
-// px/s² * s = px / (s * s) * s = px * s / (s * s) = (px / s) * (s / s) = px / s
+import { font, fontPalette, playerPalette, playerSprite } from './visuals.js'
 
 function createElement(element, parent) {
   const e = document.createElement(element)
@@ -17,18 +9,6 @@ function createElement(element, parent) {
 function createPxSize(size) {
   return `${size}px`
 }
-
-// TODO: check letters. naming is good
-const bitmapFont8x8 = Object.freeze({
-  I: [0x7e, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x7e],
-  N: [0x42, 0x62, 0x52, 0x4a, 0x46, 0x42, 0x42, 0x42],
-  O: [0x3c, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3c],
-  U: [0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x3c],
-  W: [0x42, 0x42, 0x42, 0x5a, 0x5a, 0x5a, 0x66, 0x42],
-  Y: [0x42, 0x42, 0x24, 0x18, 0x18, 0x18, 0x18, 0x18],
-  '!': [0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x18],
-  ' ': [0, 0, 0, 0, 0, 0, 0, 0]
-})
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 function createEntity(x, y, size) {
@@ -60,6 +40,7 @@ function createPlayer(x, y, size) {
     ...createPrevPosition(x, y),
     ...createVelocity(0, 0),
     isGrounded: false, // TODO: should start on false? or from param?
+    standingOn: null,
     jumpActive: false,
     jumpBufferTime: 0,
     coyoteTime: 0
@@ -107,6 +88,7 @@ function respawnPlayer(world) {
   world.player.vx = 0 // TODO: duplicate
   world.player.vy = 0 // TODO: duplicate
   world.player.isGrounded = false // TODO: duplicate
+  world.player.standingOn = null
   world.player.jumpActive = false
   world.player.jumpBufferTime = 0
   world.player.coyoteTime = 0
@@ -305,6 +287,7 @@ function createPhysicsSystem() {
       if (p.jumpBufferTime > 0 && p.coyoteTime > 0) {
         p.vy = jumpVelocity // px/s
         p.isGrounded = false
+        p.standingOn = null
         p.jumpBufferTime = 0
         p.coyoteTime = 0
         p.jumpActive = true
@@ -335,10 +318,19 @@ function createCollisionSystem() {
       let blockedBottom = false
 
       const p = world.player
+
+      if (p.standingOn) {
+        p.x += p.standingOn.x - p.standingOn.prevX
+      }
+
       p.isGrounded = false
+      p.standingOn = null // TODO: duplicate setting isGrounded and ground together
+
       const prevBottom = p.prevY + p.halfSize
 
       function handlePlayerSolidCollision(player, solid, solidPrevX, solidPrevY, applyPlatformMotion = false) {
+        // TODO: solid.halfSize + contactTolerance is duplicate a lot and solid.halfSize - contactTolerance, and maybe more?
+
         if (solid.oneWayPlatform && prevBottom > solidPrevY - solid.halfSize + contactTolerance) return
         const collision = collideAABB(player, solid)
         if (!collision) return
@@ -348,14 +340,9 @@ function createCollisionSystem() {
           player.y = solid.y - solid.halfSize - player.halfSize
           blockedBottom = true
           player.isGrounded = true
+          player.standingOn = applyPlatformMotion ? solid : null
           player.jumpActive = false
-          if (applyPlatformMotion) {
-            player.x += solid.x - solid.prevX
-            player.y += solid.y - solid.prevY
-            player.vy = Math.min(solid.vy, 0)
-          } else {
-            player.vy = 0 // TODO: duplicate
-          }
+          player.vy = Math.min(player.vy, solid.vy ?? 0)
         }
         // player was below solid (prev)
         else if (player.prevY - player.halfSize >= solidPrevY + solid.halfSize - contactTolerance) {
@@ -546,26 +533,36 @@ function createRenderer(canvas, context, world, camera) {
     fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b)
   }
 
-  function drawGlyphScreen(char, x, y, scale, r, g, b) {
-    for (let row = 0; row < 8; row++) {
-      const rowBits = bitmapFont8x8[char][row]
-      const rowY = y + row * scale
+  // TODO: check + naming all
+  function drawBitmapWorld(bitmap, width, height, palette, x, y, size, halfSize) {
+    const pixelSizeX = size / width
+    const pixelSizeY = size / height
 
-      for (let col = 0; col < 8; col++) {
-        if (rowBits & (1 << (7 - col))) {
-          fillSquareScreen(x + col * scale, rowY, scale, r, g, b)
-        }
+    const topLeft = worldToScreen(x - halfSize, y - halfSize)
+
+    for (let row = 0; row < height; row++) {
+      for (let col = 0; col < width; col++) {
+        const index = bitmap[row * width + col]
+        if (index === 0) continue
+
+        const [r, g, b] = palette[index]
+
+        fillRectScreen(topLeft.x + col * pixelSizeX, topLeft.y + row * pixelSizeY, pixelSizeX, pixelSizeY, r, g, b)
       }
     }
   }
 
-  function drawTextScreen(text, x, y, scale, r, g, b) {
-    const glyphAdvance = (8 + 1) * scale
+  // TODO: check + naming
+  function drawTextWorld(text, x, y, scale, palette) {
+    const glyphSize = 8 * scale
     let cursorX = x
 
-    for (const t of text) {
-      drawGlyphScreen(t, cursorX, y, scale, r, g, b)
-      cursorX += glyphAdvance // final increment is harmless and keeps the loop simple
+    for (const char of text) {
+      const glyph = font[char]
+
+      drawBitmapWorld(glyph, 8, 8, palette, cursorX, y, glyphSize, glyphSize / 2)
+
+      cursorX += glyphSize + scale
     }
   }
 
@@ -584,7 +581,8 @@ function createRenderer(canvas, context, world, camera) {
     clear,
     fillSquareWorld,
     fillRectScreen,
-    drawTextScreen,
+    drawBitmapWorld,
+    drawTextWorld,
     present
   }
 }
@@ -601,14 +599,15 @@ function createRenderSystem(renderer) {
         renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50)
       }
 
-      renderer.fillSquareWorld(
+      renderer.drawBitmapWorld(
+        playerSprite,
+        8,
+        8,
+        playerPalette,
         frameData.player.x,
         frameData.player.y,
         frameData.player.size,
-        frameData.player.halfSize,
-        100,
-        100,
-        100
+        frameData.player.halfSize
       )
 
       if (frameData.isWon) {
@@ -623,7 +622,7 @@ function createRenderSystem(renderer) {
         )
 
         renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180)
-        renderer.drawTextScreen('YOU WIN!', 220, 260, 4, 252, 252, 252)
+        renderer.drawTextWorld('YOU WIN!', 220, 260, 4, fontPalette) // TODO: check + bug, not middle of the screen
       } else {
         renderer.fillSquareWorld(
           frameData.goal.x,
