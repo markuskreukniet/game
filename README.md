@@ -2,6 +2,7 @@
 
 ## TODO:
 
+- moving solid against player should give the player momentum
 - add and use a config
 - add fall multiplier?
 - input reset should trigger once
