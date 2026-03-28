@@ -1,14 +1,5 @@
-import { font, fontPalette, playerPalette, playerSprite } from './visuals.js'
-
-function createElement(element, parent) {
-  const e = document.createElement(element)
-  parent.appendChild(e)
-  return e
-}
-
-function createPxSize(size) {
-  return `${size}px`
-}
+import { createElement, createPxSize } from './dom.js'
+import { font, FONT_GLYPH_SIZE, fontPalette, playerPalette, playerSprite, PLAYER_SPRITE_SIZE } from './renderAssets.js'
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 function createEntity(x, y, size) {
@@ -30,7 +21,7 @@ function createPrevPosition(prevX, prevY) {
 function createVelocity(vx, vy) {
   return {
     vx, // px/s
-    vy // px/s // TODO: is it px/s?
+    vy // px/s
   }
 }
 
@@ -83,15 +74,17 @@ function snapshotWorld(world) {
 }
 
 function respawnPlayer(world) {
-  world.player.x = world.spawn.x
-  world.player.y = world.spawn.y
-  world.player.vx = 0 // TODO: duplicate
-  world.player.vy = 0 // TODO: duplicate
-  world.player.isGrounded = false // TODO: duplicate
-  world.player.standingOn = null
-  world.player.jumpActive = false
-  world.player.jumpBufferTime = 0
-  world.player.coyoteTime = 0
+  const player = world.player
+
+  player.x = world.spawn.x
+  player.y = world.spawn.y
+  player.vx = 0 // TODO: duplicate
+  player.vy = 0 // TODO: duplicate
+  player.isGrounded = false // TODO: duplicate
+  player.standingOn = null
+  player.jumpActive = false
+  player.jumpBufferTime = 0
+  player.coyoteTime = 0
 }
 
 function collideAABB(a, b) {
@@ -533,36 +526,33 @@ function createRenderer(canvas, context, world, camera) {
     fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b)
   }
 
-  // TODO: check + naming all
-  function drawBitmapWorld(bitmap, width, height, palette, x, y, size, halfSize) {
-    const pixelSizeX = size / width
-    const pixelSizeY = size / height
+  function drawBitmapScreen(bitmap, bitmapSize, palette, topLeftX, topLeftY, size) {
+    const pixelSize = size / bitmapSize
 
-    const topLeft = worldToScreen(x - halfSize, y - halfSize)
+    for (let row = 0; row < bitmapSize; row++) {
+      const rowOffset = row * bitmapSize
+      for (let col = 0; col < bitmapSize; col++) {
+        const colorIndex = bitmap[rowOffset + col]
+        if (colorIndex === 0) continue
 
-    for (let row = 0; row < height; row++) {
-      for (let col = 0; col < width; col++) {
-        const index = bitmap[row * width + col]
-        if (index === 0) continue
-
-        const [r, g, b] = palette[index]
-
-        fillRectScreen(topLeft.x + col * pixelSizeX, topLeft.y + row * pixelSizeY, pixelSizeX, pixelSizeY, r, g, b)
+        const [r, g, b] = palette[colorIndex]
+        fillRectScreen(topLeftX + col * pixelSize, topLeftY + row * pixelSize, pixelSize, pixelSize, r, g, b)
       }
     }
   }
 
-  // TODO: check + naming
-  function drawTextWorld(text, x, y, scale, palette) {
-    const glyphSize = 8 * scale
+  function drawBitmapWorld(bitmap, bitmapSize, palette, x, y, size, halfSize) {
+    const topLeft = worldToScreen(x - halfSize, y - halfSize)
+    drawBitmapScreen(bitmap, bitmapSize, palette, topLeft.x, topLeft.y, size)
+  }
+
+  function drawTextScreen(text, x, y, pixelScale, palette) {
+    const glyphSize = FONT_GLYPH_SIZE * pixelScale
     let cursorX = x
 
     for (const char of text) {
-      const glyph = font[char]
-
-      drawBitmapWorld(glyph, 8, 8, palette, cursorX, y, glyphSize, glyphSize / 2)
-
-      cursorX += glyphSize + scale
+      drawBitmapScreen(font[char], FONT_GLYPH_SIZE, palette, cursorX, y, glyphSize)
+      cursorX += glyphSize + pixelScale
     }
   }
 
@@ -582,7 +572,7 @@ function createRenderer(canvas, context, world, camera) {
     fillSquareWorld,
     fillRectScreen,
     drawBitmapWorld,
-    drawTextWorld,
+    drawTextScreen,
     present
   }
 }
@@ -599,40 +589,24 @@ function createRenderSystem(renderer) {
         renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50)
       }
 
+      const player = frameData.player
       renderer.drawBitmapWorld(
         playerSprite,
-        8,
-        8,
+        PLAYER_SPRITE_SIZE,
         playerPalette,
-        frameData.player.x,
-        frameData.player.y,
-        frameData.player.size,
-        frameData.player.halfSize
+        player.x,
+        player.y,
+        player.size,
+        player.halfSize
       )
 
+      const goal = frameData.goal
       if (frameData.isWon) {
-        renderer.fillSquareWorld(
-          frameData.goal.x,
-          frameData.goal.y,
-          frameData.goal.size,
-          frameData.goal.halfSize,
-          255,
-          215,
-          0
-        )
-
+        renderer.fillSquareWorld(goal.x, goal.y, goal.size, goal.halfSize, 255, 215, 0)
         renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180)
-        renderer.drawTextWorld('YOU WIN!', 220, 260, 4, fontPalette) // TODO: check + bug, not middle of the screen
+        renderer.drawTextScreen('YOU WIN!', 220, 260, 4, fontPalette)
       } else {
-        renderer.fillSquareWorld(
-          frameData.goal.x,
-          frameData.goal.y,
-          frameData.goal.size,
-          frameData.goal.halfSize,
-          0,
-          200,
-          0
-        )
+        renderer.fillSquareWorld(goal.x, goal.y, goal.size, goal.halfSize, 0, 200, 0)
       }
 
       renderer.present()

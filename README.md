@@ -20,7 +20,6 @@ px/s² * s = px / (s * s) * s = px * s / (s * s) = (px / s) * (s / s) = px / s
 
 ## TODO:
 
-- a moving solid does not carry the player correct
 - add and use a config
 - add fall multiplier?
 - input reset should trigger once
