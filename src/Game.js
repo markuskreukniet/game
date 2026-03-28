@@ -1,5 +1,7 @@
 import { font, fontPalette, playerPalette, playerSprite } from './visuals.js'
 
+const FONT_GLYPH_SIZE = 8 // good naming // TODO: place, render or import
+
 function createElement(element, parent) {
   const e = document.createElement(element)
   parent.appendChild(e)
@@ -533,36 +535,34 @@ function createRenderer(canvas, context, world, camera) {
     fillSquareScreen(screenPos.x, screenPos.y, size, r, g, b)
   }
 
-  // TODO: check + naming all
-  function drawBitmapWorld(bitmap, width, height, palette, x, y, size, halfSize) {
-    const pixelSizeX = size / width
-    const pixelSizeY = size / height
+  // TODO: check + naming all // drawBitmapScreen is good naming. bitmapSize is good naming
+  function drawBitmapScreen(bitmap, bitmapSize, palette, topLeftX, topLeftY, size) {
+    const pixelSize = size / bitmapSize
 
-    const topLeft = worldToScreen(x - halfSize, y - halfSize)
-
-    for (let row = 0; row < height; row++) {
-      for (let col = 0; col < width; col++) {
-        const index = bitmap[row * width + col]
+    for (let row = 0; row < bitmapSize; row++) {
+      for (let col = 0; col < bitmapSize; col++) {
+        const index = bitmap[row * bitmapSize + col]
         if (index === 0) continue
 
         const [r, g, b] = palette[index]
 
-        fillRectScreen(topLeft.x + col * pixelSizeX, topLeft.y + row * pixelSizeY, pixelSizeX, pixelSizeY, r, g, b)
+        fillRectScreen(topLeftX + col * pixelSize, topLeftY + row * pixelSize, pixelSize, pixelSize, r, g, b)
       }
     }
   }
 
-  // TODO: check + naming
-  function drawTextWorld(text, x, y, scale, palette) {
-    const glyphSize = 8 * scale
+  function drawBitmapWorld(bitmap, bitmapSize, palette, x, y, size, halfSize) {
+    const topLeft = worldToScreen(x - halfSize, y - halfSize)
+    drawBitmapScreen(bitmap, bitmapSize, palette, topLeft.x, topLeft.y, size)
+  }
+
+  function drawTextScreen(text, x, y, pixelScale, palette) {
+    const glyphSize = FONT_GLYPH_SIZE * pixelScale
     let cursorX = x
 
     for (const char of text) {
-      const glyph = font[char]
-
-      drawBitmapWorld(glyph, 8, 8, palette, cursorX, y, glyphSize, glyphSize / 2)
-
-      cursorX += glyphSize + scale
+      drawBitmapScreen(font[char], FONT_GLYPH_SIZE, palette, cursorX, y, glyphSize)
+      cursorX += glyphSize + pixelScale
     }
   }
 
@@ -582,7 +582,7 @@ function createRenderer(canvas, context, world, camera) {
     fillSquareWorld,
     fillRectScreen,
     drawBitmapWorld,
-    drawTextWorld,
+    drawTextScreen,
     present
   }
 }
@@ -601,8 +601,7 @@ function createRenderSystem(renderer) {
 
       renderer.drawBitmapWorld(
         playerSprite,
-        8,
-        8,
+        8, // TODO:
         playerPalette,
         frameData.player.x,
         frameData.player.y,
@@ -622,7 +621,7 @@ function createRenderSystem(renderer) {
         )
 
         renderer.fillRectScreen(0, 0, frameData.renderWidth, frameData.renderHeight, 0, 0, 0, 180)
-        renderer.drawTextWorld('YOU WIN!', 220, 260, 4, fontPalette) // TODO: check + bug, not middle of the screen
+        renderer.drawTextScreen('YOU WIN!', 220, 260, 4, fontPalette)
       } else {
         renderer.fillSquareWorld(
           frameData.goal.x,
