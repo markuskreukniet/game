@@ -4,5 +4,8 @@
   "useTabs": false,
   "printWidth": 120,
   "trailingComma": "none",
-  "singleQuote": true
+  "singleQuote": true,
+  "bracketSpacing": false,
+  "objectWrap": "collapse",
+  "arrowParens": "avoid"
 }

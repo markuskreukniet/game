@@ -1,21 +1,13 @@
-import { createElement, createPxSize } from './dom.js'
-import { font, FONT_GLYPH_SIZE, fontPalette, playerPalette, playerSprite, PLAYER_SPRITE_SIZE } from './renderAssets.js'
+import {createElement, createPxSize} from './dom.js'
+import {font, FONT_GLYPH_SIZE, fontPalette, playerPalette, playerSprite, PLAYER_SPRITE_SIZE} from './renderAssets.js'
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 function createEntity(x, y, size) {
-  return {
-    x,
-    y,
-    size,
-    halfSize: size / 2
-  }
+  return {x, y, size, halfSize: size / 2}
 }
 
 function createPrevPosition(prevX, prevY) {
-  return {
-    prevX,
-    prevY
-  }
+  return {prevX, prevY}
 }
 
 function createVelocity(vx, vy) {
@@ -39,10 +31,7 @@ function createPlayer(x, y, size) {
 }
 
 function createSolid(x, y, size, oneWayPlatform) {
-  return {
-    ...createEntity(x, y, size),
-    oneWayPlatform
-  }
+  return {...createEntity(x, y, size), oneWayPlatform}
 }
 
 function createMovingSolid(x, y, size, oneWayPlatform, vx, vy, minX = null, maxX = null, minY = null, maxY = null) {
@@ -57,19 +46,14 @@ function createMovingSolid(x, y, size, oneWayPlatform, vx, vy, minX = null, maxX
   }
 }
 
-// TODO: same as createEntity, so remove it?
-function toBox(entity) {
-  return {
-    x: entity.x,
-    y: entity.y,
-    size: entity.size,
-    halfSize: entity.halfSize
-  }
+function toFrameEntity(entity) {
+  return createEntity(entity.x, entity.y, entity.size)
 }
 
 function snapshotWorld(world) {
   return {
-    player: { x: world.player.x, y: world.player.y }
+    player: {x: world.player.x, y: world.player.y},
+    movingSolids: world.movingSolids.map(solid => ({x: solid.x, y: solid.y}))
   }
 }
 
@@ -100,13 +84,7 @@ function collideAABB(a, b) {
     return null
   }
 
-  return {
-    dx,
-    dy,
-    combinedHalfSize,
-    penetrationX: combinedHalfSize - absDx,
-    penetrationY: combinedHalfSize - absDy
-  }
+  return {dx, dy, combinedHalfSize, penetrationX: combinedHalfSize - absDx, penetrationY: combinedHalfSize - absDy}
 }
 
 function interpolate(start, end, alpha) {
@@ -122,7 +100,7 @@ function createWorld() {
   const width = 800
   const size = 50
   const maxX = width / 2
-  const spawn = { x: 0, y: -200 }
+  const spawn = {x: 0, y: -200}
 
   return {
     width,
@@ -156,9 +134,17 @@ function buildFrameData(previous, current, alpha, world) {
     renderWidth: world.width,
     renderHeight: world.height,
     isWon: world.isWon,
-    goal: toBox(world.goal),
-    solids: world.solids.map(toBox),
-    movingSolids: world.movingSolids.map(toBox),
+    goal: toFrameEntity(world.goal),
+    solids: world.solids.map(toFrameEntity),
+    movingSolids: world.movingSolids.map((solid, index) => {
+      const previousSolid = previous.movingSolids[index]
+
+      return createEntity(
+        interpolate(previousSolid.x, solid.x, alpha),
+        interpolate(previousSolid.y, solid.y, alpha),
+        solid.size
+      )
+    }),
     player: createPlayer(playerX, playerY, world.player.size)
   }
 }
@@ -169,15 +155,9 @@ function createInputSystem() {
   const arrowUp = 'ArrowUp'
   const keyR = 'KeyR'
 
-  const input = {
-    left: false,
-    right: false,
-    jump: false,
-    jumpPressed: false,
-    reset: false
-  }
+  const input = {left: false, right: false, jump: false, jumpPressed: false, reset: false}
 
-  document.addEventListener('keydown', (e) => {
+  document.addEventListener('keydown', e => {
     if (e.code === arrowLeft) input.left = true
     if (e.code === arrowRight) input.right = true
     if (e.code === keyR) input.reset = true // TODO: make sure it triggers once
@@ -188,14 +168,14 @@ function createInputSystem() {
     }
   })
 
-  document.addEventListener('keyup', (e) => {
+  document.addEventListener('keyup', e => {
     if (e.code === arrowLeft) input.left = false
     if (e.code === arrowRight) input.right = false
     if (e.code === keyR) input.reset = false
     if (e.code === arrowUp) input.jump = false
   })
 
-  return { input }
+  return {input}
 }
 
 function createMovingSolidSystem() {
@@ -458,10 +438,7 @@ function createRenderer(canvas, context, world, camera) {
   }
 
   function worldToScreen(x, y) {
-    return {
-      x: x - camera.x + world.maxX,
-      y: y - camera.y + screenCenterY
-    }
+    return {x: x - camera.x + world.maxX, y: y - camera.y + screenCenterY}
   }
 
   function snapToDevicePixel(coord) {
@@ -567,14 +544,7 @@ function createRenderer(canvas, context, world, camera) {
   resize()
   window.addEventListener('resize', resize) // resize independent of main loop
 
-  return {
-    clear,
-    fillSquareWorld,
-    fillRectScreen,
-    drawBitmapWorld,
-    drawTextScreen,
-    present
-  }
+  return {clear, fillSquareWorld, fillRectScreen, drawBitmapWorld, drawTextScreen, present}
 }
 
 function createRenderSystem(renderer) {
@@ -624,10 +594,7 @@ export default function game(parent) {
   const canvas = createElement('canvas', parent)
   const context = canvas.getContext('2d')
 
-  const camera = {
-    x: 0,
-    y: 0
-  }
+  const camera = {x: 0, y: 0}
 
   const world = createWorld()
 
