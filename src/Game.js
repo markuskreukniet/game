@@ -93,6 +93,7 @@ function collideAABB(a, b) {
   const absDx = Math.abs(dx)
   const absDy = Math.abs(dy)
 
+  // TODO: to single line if and also on other places
   if (absDx >= combinedHalfSize || absDy >= combinedHalfSize) {
     return null
   }
@@ -250,9 +251,11 @@ function createPhysicsSystem() {
   // TODO: these consts to a config
   const jumpVelocity = -450
   const gravity = 800
-  const coyoteTime = 0.08 // s // TODO: base it on frames?
-  const jumpBufferTime = 0.1 // s // TODO: base it on frames?
-  const jumpCutMultiplier = 0.5
+  const coyoteTime = 0.08 // s
+  const jumpBufferTime = 0.1 // s
+  const maxFallSpeed = 700
+  const fallGravityScale = 1.6
+  const earlyReleaseGravityScale = 1.6
 
   return {
     update(world, input, dt) {
@@ -279,14 +282,22 @@ function createPhysicsSystem() {
         p.jumpActive = true
       }
 
-      if (!input.jump && p.vy < 0 && p.jumpActive) {
-        // TODO: to single line if and also on other places
-        p.vy *= jumpCutMultiplier
+      let gravityScale = 1
+      if (p.vy > 0) {
+        gravityScale = fallGravityScale
+      } else if (!input.jump && p.vy < 0 && p.jumpActive) {
+        gravityScale = earlyReleaseGravityScale
+      }
+
+      p.vy += gravity * gravityScale * dt // px/s² // TODO: still px/s²?
+      p.vy = Math.min(p.vy, maxFallSpeed)
+
+      if (p.vy >= 0) {
+        p.jumpActive = false
       }
 
       p.prevX = p.x
       p.prevY = p.y
-      p.vy += gravity * dt // px/s²
 
       input.jumpPressed = false
     }

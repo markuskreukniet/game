@@ -20,8 +20,9 @@ px/s² * s = px / (s * s) * s = px * s / (s * s) = (px / s) * (s / s) = px / s
 
 ## TODO:
 
+- player sprite can watch left and right
+- moving player sprite
 - add and use a config
-- add fall multiplier?
 - input reset should trigger once
 - background instead of white
 
