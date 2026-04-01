@@ -1,5 +1,18 @@
 import {createElement, createPxSize} from './dom.js'
-import {font, FONT_GLYPH_SIZE, fontPalette, playerPalette, playerSprite, PLAYER_SPRITE_SIZE} from './renderAssets.js'
+import {
+  font,
+  FONT_GLYPH_SIZE,
+  fontPalette,
+  platformPalette,
+  platformSprite,
+  PLATFORM_SPRITE_SIZE,
+  playerPalette,
+  playerSprite,
+  PLAYER_SPRITE_SIZE,
+  terrainPalette,
+  terrainSprite,
+  TERRAIN_SPRITE_SIZE
+} from './renderAssets.js'
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 function createEntity(x, y, size) {
@@ -553,10 +566,10 @@ function createRenderSystem(renderer) {
       renderer.clear()
 
       for (const s of frameData.solids) {
-        renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50)
+        renderer.drawBitmapWorld(terrainSprite, TERRAIN_SPRITE_SIZE, terrainPalette, s.x, s.y, s.size, s.halfSize)
       }
       for (const s of frameData.movingSolids) {
-        renderer.fillSquareWorld(s.x, s.y, s.size, s.halfSize, 50, 50, 50)
+        renderer.drawBitmapWorld(platformSprite, PLATFORM_SPRITE_SIZE, platformPalette, s.x, s.y, s.size, s.halfSize)
       }
 
       const player = frameData.player
@@ -614,7 +627,7 @@ export default function game(parent) {
   let renderAccumulator = 0
 
   let currentSnapshot = snapshotWorld(world)
-  let previousSnapshot = currentSnapshot
+  let previousSnapshot = currentSnapshot // TODO: is previousSnapshot usefull? Is it not the same as world?
 
   function loop(now) {
     let deltaMs = now - last
