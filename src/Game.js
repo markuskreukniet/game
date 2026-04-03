@@ -3,6 +3,9 @@ import {
   font,
   FONT_GLYPH_SIZE,
   fontPalette,
+  oneWayPlatformPalette,
+  oneWayPlatformSprite,
+  ONE_WAY_PLATFORM_SPRITE_SIZE,
   platformPalette,
   platformSprite,
   PLATFORM_SPRITE_SIZE,
@@ -57,10 +60,6 @@ function createMovingSolid(x, y, size, oneWayPlatform, vx, vy, minX = null, maxX
     minY: minY ?? y,
     maxY: maxY ?? y
   }
-}
-
-function toFrameEntity(entity) {
-  return createEntity(entity.x, entity.y, entity.size)
 }
 
 function snapshotWorld(world) {
@@ -128,12 +127,13 @@ function createWorld() {
       createSolid(0, 200, size, false),
       createSolid(-100, 180, size, false),
       createSolid(20, 90, size, true),
-      createSolid(50, 530, 500, false),
+      createSolid(50, 530, 600, false),
       createSolid(250, 100, size, false)
     ],
     movingSolids: [
       createMovingSolid(-150, 120, 50, false, -60, -60, -200, -100, 60, 130),
-      createMovingSolid(200, 150, 50, false, 0, -400, null, null, 100, 300)
+      createMovingSolid(200, 150, 50, false, 0, -400, null, null, 100, 300),
+      createMovingSolid(350, 100, 50, true, 0, -100, null, null, 50, 150)
     ],
     goal: createEntity(100, 150, size),
     isWon: false
@@ -141,6 +141,7 @@ function createWorld() {
 }
 
 function buildFrameData(previous, current, alpha, world) {
+  const goal = world.goal
   const playerX = interpolate(previous.player.x, current.player.x, alpha)
   const playerY = interpolate(previous.player.y, current.player.y, alpha)
 
@@ -148,15 +149,16 @@ function buildFrameData(previous, current, alpha, world) {
     renderWidth: world.width,
     renderHeight: world.height,
     isWon: world.isWon,
-    goal: toFrameEntity(world.goal),
-    solids: world.solids.map(toFrameEntity),
+    goal: createEntity(goal.x, goal.y, goal.size),
+    solids: world.solids.map(solid => createSolid(solid.x, solid.y, solid.size, solid.oneWayPlatform)),
     movingSolids: world.movingSolids.map((solid, index) => {
       const previousSolid = previous.movingSolids[index]
 
-      return createEntity(
+      return createSolid(
         interpolate(previousSolid.x, solid.x, alpha),
         interpolate(previousSolid.y, solid.y, alpha),
-        solid.size
+        solid.size,
+        solid.oneWayPlatform
       )
     }),
     player: createPlayer(playerX, playerY, world.player.size)
@@ -577,10 +579,35 @@ function createRenderSystem(renderer) {
       renderer.clear()
 
       for (const s of frameData.solids) {
-        renderer.drawBitmapWorld(terrainSprite, TERRAIN_SPRITE_SIZE, terrainPalette, s.x, s.y, s.size, s.halfSize)
+        if (s.oneWayPlatform) {
+          renderer.drawBitmapWorld(
+            oneWayPlatformSprite,
+            ONE_WAY_PLATFORM_SPRITE_SIZE,
+            oneWayPlatformPalette,
+            s.x,
+            s.y,
+            s.size,
+            s.halfSize
+          )
+        } else {
+          renderer.drawBitmapWorld(terrainSprite, TERRAIN_SPRITE_SIZE, terrainPalette, s.x, s.y, s.size, s.halfSize)
+        }
       }
+
       for (const s of frameData.movingSolids) {
-        renderer.drawBitmapWorld(platformSprite, PLATFORM_SPRITE_SIZE, platformPalette, s.x, s.y, s.size, s.halfSize)
+        if (s.oneWayPlatform) {
+          renderer.drawBitmapWorld(
+            oneWayPlatformSprite,
+            ONE_WAY_PLATFORM_SPRITE_SIZE,
+            oneWayPlatformPalette,
+            s.x,
+            s.y,
+            s.size,
+            s.halfSize
+          )
+        } else {
+          renderer.drawBitmapWorld(platformSprite, PLATFORM_SPRITE_SIZE, platformPalette, s.x, s.y, s.size, s.halfSize)
+        }
       }
 
       const player = frameData.player
