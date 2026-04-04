@@ -8,6 +8,9 @@ import {
   ONE_WAY_PLATFORM_SPRITE_SIZE,
   platformPalette,
   platformSprite,
+  ONE_WAY_TERRAIN_SPRITE_SIZE,
+  oneWayTerrainPalette,
+  oneWayTerrainSprite,
   PLATFORM_SPRITE_SIZE,
   playerPalette,
   playerSprite,
@@ -581,9 +584,9 @@ function createRenderSystem(renderer) {
       for (const s of frameData.solids) {
         if (s.oneWayPlatform) {
           renderer.drawBitmapWorld(
-            oneWayPlatformSprite,
-            ONE_WAY_PLATFORM_SPRITE_SIZE,
-            oneWayPlatformPalette,
+            oneWayTerrainSprite,
+            ONE_WAY_TERRAIN_SPRITE_SIZE,
+            oneWayTerrainPalette,
             s.x,
             s.y,
             s.size,
