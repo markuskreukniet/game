@@ -20,11 +20,9 @@ px/s² * s = px / (s * s) * s = px * s / (s * s) = (px / s) * (s / s) = px / s
 
 ## TODO:
 
-- player sprite can watch left and right
 - moving player sprite
 - add and use a config
 - input reset should trigger once
-- background instead of white
 
 - do more like this const p = world.player. + remove some abstraction?
 - should numbers like 255 be an constant? don't use / 2, but use _ 0.5. Abstract _ dpi and \* dt duplicates?

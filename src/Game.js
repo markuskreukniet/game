@@ -1,5 +1,6 @@
 import {createElement, createPxSize} from './dom.js'
 import {
+  backdropColor,
   font,
   FONT_GLYPH_SIZE,
   fontPalette,
@@ -20,6 +21,23 @@ import {
   TERRAIN_SPRITE_SIZE
 } from './renderAssets.js'
 
+function flipBitmapHorizontally(bitmap, bitmapSize) {
+  const flipped = new Uint8Array(bitmap.length)
+  const lastColumnIndex = bitmapSize - 1
+
+  for (let row = 0; row < bitmapSize; row++) {
+    const rowOffset = row * bitmapSize
+
+    for (let col = 0; col < bitmapSize; col++) {
+      flipped[rowOffset + col] = bitmap[rowOffset + (lastColumnIndex - col)]
+    }
+  }
+
+  return flipped
+}
+
+const playerSpriteFlipped = flipBitmapHorizontally(playerSprite, PLAYER_SPRITE_SIZE)
+
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 function createEntity(x, y, size) {
   return {x, y, size, halfSize: size / 2}
@@ -36,7 +54,7 @@ function createVelocity(vx, vy) {
   }
 }
 
-function createPlayer(x, y, size) {
+function createPlayer(x, y, size, facingRight) {
   return {
     ...createEntity(x, y, size),
     ...createPrevPosition(x, y),
@@ -45,7 +63,8 @@ function createPlayer(x, y, size) {
     standingOn: null,
     jumpActive: false,
     jumpBufferTime: 0,
-    coyoteTime: 0
+    coyoteTime: 0,
+    facingRight
   }
 }
 
@@ -125,7 +144,7 @@ function createWorld() {
     minX: -maxX,
     spawn,
     killPlaneY: 900,
-    player: createPlayer(spawn.x, spawn.y, size),
+    player: createPlayer(spawn.x, spawn.y, size, true),
     solids: [
       createSolid(0, 200, size, false),
       createSolid(-100, 180, size, false),
@@ -164,7 +183,7 @@ function buildFrameData(previous, current, alpha, world) {
         solid.oneWayPlatform
       )
     }),
-    player: createPlayer(playerX, playerY, world.player.size)
+    player: createPlayer(playerX, playerY, world.player.size, world.player.facingRight)
   }
 }
 
@@ -233,20 +252,23 @@ function createMovementSystem() {
 
   return {
     update(world, input, dt) {
-      const acceleration = world.player.isGrounded ? 1500 : 500 // px/s²
+      const player = world.player
+      const acceleration = player.isGrounded ? 1500 : 500 // px/s²
 
       if (input.left && !input.right) {
-        world.player.vx -= acceleration * dt
+        player.vx -= acceleration * dt
+        player.facingRight = false
       } else if (input.right && !input.left) {
-        world.player.vx += acceleration * dt
+        player.vx += acceleration * dt
+        player.facingRight = true
       }
 
-      world.player.vx -= world.player.vx * (world.player.isGrounded ? 15 : 2) * dt
+      player.vx -= player.vx * (player.isGrounded ? 15 : 2) * dt
 
-      if (world.player.vx > maxRightwardSpeed) {
-        world.player.vx = maxRightwardSpeed
-      } else if (world.player.vx < maxLeftwardSpeed) {
-        world.player.vx = maxLeftwardSpeed
+      if (player.vx > maxRightwardSpeed) {
+        player.vx = maxRightwardSpeed
+      } else if (player.vx < maxLeftwardSpeed) {
+        player.vx = maxLeftwardSpeed
       }
     }
   }
@@ -562,8 +584,29 @@ function createRenderer(canvas, context, world, camera) {
     }
   }
 
+  // TODO: check complete function also with namings
+  function drawBackground() {
+    // simple horizon / ground tint example
+    fillRectScreen(0, world.height * 0.65, world.width, world.height * 0.35, 120, 200, 120)
+
+    // distant hills (very simple chunky retro shapes)
+    fillRectScreen(40 - ((camera.x * 0.2) % 200), 300, 180, 120, 100, 170, 100)
+    fillRectScreen(220 - ((camera.x * 0.2) % 200), 260, 220, 160, 100, 170, 100)
+    fillRectScreen(500 - ((camera.x * 0.2) % 200), 290, 200, 130, 100, 170, 100)
+
+    // clouds
+    fillRectScreen(100 - ((camera.x * 0.1) % 300), 80, 60, 20, 255, 255, 255, 180)
+    fillRectScreen(300 - ((camera.x * 0.1) % 300), 120, 80, 20, 255, 255, 255, 180)
+    fillRectScreen(600 - ((camera.x * 0.1) % 300), 60, 70, 20, 255, 255, 255, 180)
+  }
+
   function clear() {
-    data.fill(0)
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = backdropColor[0]
+      data[i + 1] = backdropColor[1]
+      data[i + 2] = backdropColor[2]
+      data[i + 3] = 255
+    }
   }
 
   function present() {
@@ -573,13 +616,14 @@ function createRenderer(canvas, context, world, camera) {
   resize()
   window.addEventListener('resize', resize) // resize independent of main loop
 
-  return {clear, fillSquareWorld, fillRectScreen, drawBitmapWorld, drawTextScreen, present}
+  return {clear, drawBackground, fillSquareWorld, fillRectScreen, drawBitmapWorld, drawTextScreen, present}
 }
 
 function createRenderSystem(renderer) {
   return {
     render(frameData) {
       renderer.clear()
+      renderer.drawBackground()
 
       for (const s of frameData.solids) {
         if (s.oneWayPlatform) {
@@ -615,7 +659,7 @@ function createRenderSystem(renderer) {
 
       const player = frameData.player
       renderer.drawBitmapWorld(
-        playerSprite,
+        player.facingRight ? playerSprite : playerSpriteFlipped,
         PLAYER_SPRITE_SIZE,
         playerPalette,
         player.x,
