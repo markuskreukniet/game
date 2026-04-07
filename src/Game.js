@@ -4,6 +4,9 @@ import {
   font,
   FONT_GLYPH_SIZE,
   fontPalette,
+  MID_LAYER_HILL_SPRITE_SIZE,
+  midLayerHillSpritePalette,
+  midLayerHillSprite,
   oneWayPlatformPalette,
   oneWayPlatformSprite,
   ONE_WAY_PLATFORM_SPRITE_SIZE,
@@ -37,6 +40,8 @@ function flipBitmapHorizontally(bitmap, bitmapSize) {
 }
 
 const playerSpriteFlipped = flipBitmapHorizontally(playerSprite, PLAYER_SPRITE_SIZE)
+
+const MID_LAYER_SPRITE_SIZE = MID_LAYER_HILL_SPRITE_SIZE * 5 // TODO: HILL_SPRITE_SIZE should get a more common name, same for other _SIZE consts
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 function createEntity(x, y, size) {
@@ -584,20 +589,41 @@ function createRenderer(canvas, context, world, camera) {
     }
   }
 
-  // TODO: check complete function also with namings
   function drawBackground() {
-    // simple horizon / ground tint example
-    fillRectScreen(0, world.height * 0.65, world.width, world.height * 0.35, 120, 200, 120)
+    fillRectScreen(0, world.height * 0.65, world.width, world.height * 0.35, 120, 200, 120) // TODO: check. don't use alpha?
 
-    // distant hills (very simple chunky retro shapes)
-    fillRectScreen(40 - ((camera.x * 0.2) % 200), 300, 180, 120, 100, 170, 100)
-    fillRectScreen(220 - ((camera.x * 0.2) % 200), 260, 220, 160, 100, 170, 100)
-    fillRectScreen(500 - ((camera.x * 0.2) % 200), 290, 200, 130, 100, 170, 100)
+    const midLayerOffset = (camera.x * 0.2) % 200
+    const farLayerOffset = (camera.x * 0.1) % 300
 
-    // clouds
-    fillRectScreen(100 - ((camera.x * 0.1) % 300), 80, 60, 20, 255, 255, 255, 180)
-    fillRectScreen(300 - ((camera.x * 0.1) % 300), 120, 80, 20, 255, 255, 255, 180)
-    fillRectScreen(600 - ((camera.x * 0.1) % 300), 60, 70, 20, 255, 255, 255, 180)
+    drawBitmapScreen(
+      midLayerHillSprite,
+      MID_LAYER_HILL_SPRITE_SIZE,
+      midLayerHillSpritePalette,
+      40 - midLayerOffset,
+      260,
+      MID_LAYER_SPRITE_SIZE
+    )
+    drawBitmapScreen(
+      midLayerHillSprite,
+      MID_LAYER_HILL_SPRITE_SIZE,
+      midLayerHillSpritePalette,
+      220 - midLayerOffset,
+      240,
+      MID_LAYER_SPRITE_SIZE
+    )
+    drawBitmapScreen(
+      midLayerHillSprite,
+      MID_LAYER_HILL_SPRITE_SIZE,
+      midLayerHillSpritePalette,
+      500 - midLayerOffset,
+      250,
+      MID_LAYER_SPRITE_SIZE
+    )
+
+    // TODO: to bitmaps these three
+    fillRectScreen(100 - farLayerOffset, 80, 60, 20, 255, 255, 255, 180)
+    fillRectScreen(300 - farLayerOffset, 120, 80, 20, 255, 255, 255, 180)
+    fillRectScreen(600 - farLayerOffset, 60, 70, 20, 255, 255, 255, 180)
   }
 
   function clear() {
