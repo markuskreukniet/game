@@ -1,28 +1,29 @@
 import {createElement, createPxSize} from './dom.js'
 import {
   backdropColor,
+  FAR_LAYER_SPRITE_SIZE,
+  farLayerCloudPalette,
+  farLayerCloudSprite,
   font,
   FONT_GLYPH_SIZE,
   fontPalette,
-  MID_LAYER_HILL_SPRITE_SIZE,
-  midLayerHillSpritePalette,
+  FRONT_LAYER_SPRITE_SIZE,
+  MID_LAYER_SPRITE_SIZE,
+  midLayerHillPalette,
   midLayerHillSprite,
   oneWayPlatformPalette,
   oneWayPlatformSprite,
-  ONE_WAY_PLATFORM_SPRITE_SIZE,
   platformPalette,
   platformSprite,
-  ONE_WAY_TERRAIN_SPRITE_SIZE,
   oneWayTerrainPalette,
   oneWayTerrainSprite,
-  PLATFORM_SPRITE_SIZE,
   playerPalette,
   playerSprite,
-  PLAYER_SPRITE_SIZE,
   terrainPalette,
-  terrainSprite,
-  TERRAIN_SPRITE_SIZE
+  terrainSprite
 } from './renderAssets.js'
+
+// TODO: rename bitmap to sprite
 
 function flipBitmapHorizontally(bitmap, bitmapSize) {
   const flipped = new Uint8Array(bitmap.length)
@@ -39,9 +40,10 @@ function flipBitmapHorizontally(bitmap, bitmapSize) {
   return flipped
 }
 
-const playerSpriteFlipped = flipBitmapHorizontally(playerSprite, PLAYER_SPRITE_SIZE)
+const playerSpriteFlipped = flipBitmapHorizontally(playerSprite, FRONT_LAYER_SPRITE_SIZE)
 
-const MID_LAYER_SPRITE_SIZE = MID_LAYER_HILL_SPRITE_SIZE * 5 // TODO: HILL_SPRITE_SIZE should get a more common name, same for other _SIZE consts
+const MID_LAYER_SPRITE_RENDER_SIZE = MID_LAYER_SPRITE_SIZE * 5
+const FAR_LAYER_SPRITE_RENDER_SIZE = FAR_LAYER_SPRITE_SIZE * 13
 
 // TODO: should there be a version that accepts a halfSize? Maybe good if there are multiple of the same size
 function createEntity(x, y, size) {
@@ -597,33 +599,53 @@ function createRenderer(canvas, context, world, camera) {
 
     drawBitmapScreen(
       midLayerHillSprite,
-      MID_LAYER_HILL_SPRITE_SIZE,
-      midLayerHillSpritePalette,
+      MID_LAYER_SPRITE_SIZE,
+      midLayerHillPalette,
       40 - midLayerOffset,
       260,
-      MID_LAYER_SPRITE_SIZE
+      MID_LAYER_SPRITE_RENDER_SIZE
     )
     drawBitmapScreen(
       midLayerHillSprite,
-      MID_LAYER_HILL_SPRITE_SIZE,
-      midLayerHillSpritePalette,
+      MID_LAYER_SPRITE_SIZE,
+      midLayerHillPalette,
       220 - midLayerOffset,
       240,
-      MID_LAYER_SPRITE_SIZE
+      MID_LAYER_SPRITE_RENDER_SIZE
     )
     drawBitmapScreen(
       midLayerHillSprite,
-      MID_LAYER_HILL_SPRITE_SIZE,
-      midLayerHillSpritePalette,
+      MID_LAYER_SPRITE_SIZE,
+      midLayerHillPalette,
       500 - midLayerOffset,
       250,
-      MID_LAYER_SPRITE_SIZE
+      MID_LAYER_SPRITE_RENDER_SIZE
     )
 
-    // TODO: to bitmaps these three
-    fillRectScreen(100 - farLayerOffset, 80, 60, 20, 255, 255, 255, 180)
-    fillRectScreen(300 - farLayerOffset, 120, 80, 20, 255, 255, 255, 180)
-    fillRectScreen(600 - farLayerOffset, 60, 70, 20, 255, 255, 255, 180)
+    drawBitmapScreen(
+      farLayerCloudSprite,
+      FAR_LAYER_SPRITE_SIZE,
+      farLayerCloudPalette,
+      100 - farLayerOffset,
+      80,
+      FAR_LAYER_SPRITE_RENDER_SIZE
+    )
+    drawBitmapScreen(
+      farLayerCloudSprite,
+      FAR_LAYER_SPRITE_SIZE,
+      farLayerCloudPalette,
+      300 - farLayerOffset,
+      120,
+      FAR_LAYER_SPRITE_RENDER_SIZE
+    )
+    drawBitmapScreen(
+      farLayerCloudSprite,
+      FAR_LAYER_SPRITE_SIZE,
+      farLayerCloudPalette,
+      600 - farLayerOffset,
+      60,
+      FAR_LAYER_SPRITE_RENDER_SIZE
+    )
   }
 
   function clear() {
@@ -655,7 +677,7 @@ function createRenderSystem(renderer) {
         if (s.oneWayPlatform) {
           renderer.drawBitmapWorld(
             oneWayTerrainSprite,
-            ONE_WAY_TERRAIN_SPRITE_SIZE,
+            FRONT_LAYER_SPRITE_SIZE,
             oneWayTerrainPalette,
             s.x,
             s.y,
@@ -663,7 +685,7 @@ function createRenderSystem(renderer) {
             s.halfSize
           )
         } else {
-          renderer.drawBitmapWorld(terrainSprite, TERRAIN_SPRITE_SIZE, terrainPalette, s.x, s.y, s.size, s.halfSize)
+          renderer.drawBitmapWorld(terrainSprite, FRONT_LAYER_SPRITE_SIZE, terrainPalette, s.x, s.y, s.size, s.halfSize)
         }
       }
 
@@ -671,7 +693,7 @@ function createRenderSystem(renderer) {
         if (s.oneWayPlatform) {
           renderer.drawBitmapWorld(
             oneWayPlatformSprite,
-            ONE_WAY_PLATFORM_SPRITE_SIZE,
+            FRONT_LAYER_SPRITE_SIZE,
             oneWayPlatformPalette,
             s.x,
             s.y,
@@ -679,14 +701,22 @@ function createRenderSystem(renderer) {
             s.halfSize
           )
         } else {
-          renderer.drawBitmapWorld(platformSprite, PLATFORM_SPRITE_SIZE, platformPalette, s.x, s.y, s.size, s.halfSize)
+          renderer.drawBitmapWorld(
+            platformSprite,
+            FRONT_LAYER_SPRITE_SIZE,
+            platformPalette,
+            s.x,
+            s.y,
+            s.size,
+            s.halfSize
+          )
         }
       }
 
       const player = frameData.player
       renderer.drawBitmapWorld(
         player.facingRight ? playerSprite : playerSpriteFlipped,
-        PLAYER_SPRITE_SIZE,
+        FRONT_LAYER_SPRITE_SIZE,
         playerPalette,
         player.x,
         player.y,

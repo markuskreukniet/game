@@ -1,6 +1,12 @@
-export const playerPalette = [null, [255, 0, 0], [255, 200, 150], [100, 50, 0]]
+// the Uint8Arrays here are sprites. Only the those of the fonts are fontGlyphs.
+// use _SPRITE_SIZE and FONT_GLYPH_SIZE
+// use Pallette naming, not spritePalette
 
-export const PLAYER_SPRITE_SIZE = 16
+export const FRONT_LAYER_SPRITE_SIZE = 16
+export const MID_LAYER_SPRITE_SIZE = 32
+export const FAR_LAYER_SPRITE_SIZE = 8
+
+export const playerPalette = [null, [255, 0, 0], [255, 200, 150], [100, 50, 0]]
 
 // prettier-ignore
 export const playerSprite = new Uint8Array([
@@ -24,8 +30,9 @@ export const playerSprite = new Uint8Array([
 
 export const fontPalette = [null, [252, 252, 252]]
 
-export const FONT_GLYPH_SIZE = 8
+export const FONT_GLYPH_SIZE = 8 // Correct naming
 
+// TODO: rename to fontGlyphs
 export const font = Object.freeze({
   I: new Uint8Array([
     0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
@@ -63,8 +70,6 @@ export const font = Object.freeze({
 
 export const terrainPalette = [null, [50, 50, 50], [95, 95, 95], [140, 140, 140]]
 
-export const TERRAIN_SPRITE_SIZE = 16
-
 export const terrainSprite = new Uint8Array([
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 3, 2, 2, 2, 2, 2,
   2, 2, 2, 2, 2, 2, 2, 3, 1, 1, 3, 2, 1, 2, 2, 2, 3, 2, 2, 2, 1, 2, 2, 3, 1, 1, 3, 2, 2, 2, 3, 2, 2, 2, 3, 2, 2, 2, 2,
@@ -76,8 +81,6 @@ export const terrainSprite = new Uint8Array([
 ])
 
 export const platformPalette = [null, [35, 35, 60], [90, 110, 150], [170, 210, 255]]
-
-export const PLATFORM_SPRITE_SIZE = 16
 
 export const platformSprite = new Uint8Array([
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 3, 3, 1, 3, 3, 1, 3, 3, 1, 3, 3, 1, 1, 3, 2, 2, 2, 2, 2,
@@ -91,8 +94,6 @@ export const platformSprite = new Uint8Array([
 
 export const oneWayPlatformPalette = [null, [60, 30, 80], [140, 90, 180], [220, 180, 255]]
 
-export const ONE_WAY_PLATFORM_SPRITE_SIZE = 16
-
 export const oneWayPlatformSprite = new Uint8Array([
   3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1,
   1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -104,8 +105,6 @@ export const oneWayPlatformSprite = new Uint8Array([
 ])
 
 export const oneWayTerrainPalette = terrainPalette
-
-export const ONE_WAY_TERRAIN_SPRITE_SIZE = 16
 
 export const oneWayTerrainSprite = new Uint8Array([
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 3, 2, 2, 2, 2, 2,
@@ -119,9 +118,7 @@ export const oneWayTerrainSprite = new Uint8Array([
 
 export const backdropColor = [92, 148, 252]
 
-export const midLayerHillSpritePalette = [null, [80, 140, 90], [110, 180, 120], [50, 100, 60]]
-
-export const MID_LAYER_HILL_SPRITE_SIZE = 32
+export const midLayerHillPalette = [null, [80, 140, 90], [110, 180, 120], [50, 100, 60]]
 
 // prettier-ignore
 export const midLayerHillSprite = new Uint8Array([
@@ -157,4 +154,18 @@ export const midLayerHillSprite = new Uint8Array([
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3
+])
+
+export const farLayerCloudPalette = [null, [255, 255, 255], [235, 245, 255], [200, 220, 245]]
+
+// prettier-ignore
+export const farLayerCloudSprite = new Uint8Array([
+  0, 0, 1, 1, 1, 1, 0, 0,
+  0, 1, 2, 2, 2, 2, 1, 0,
+  1, 2, 2, 1, 1, 2, 2, 1,
+  1, 2, 1, 1, 1, 1, 2, 1,
+  1, 2, 2, 1, 1, 2, 2, 1,
+  0, 1, 2, 2, 2, 2, 1, 0,
+  0, 0, 3, 3, 3, 3, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0
 ])
