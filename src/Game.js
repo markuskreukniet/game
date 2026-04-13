@@ -1,3 +1,4 @@
+import {createAudio} from './audio.js'
 import {createElement, createPxSize} from './dom.js'
 import {
   backdropColor,
@@ -98,7 +99,7 @@ function snapshotWorld(world) {
   }
 }
 
-function respawnPlayer(world) {
+function respawnPlayer(world, audio) {
   const player = world.player
 
   player.x = world.spawn.x
@@ -110,6 +111,8 @@ function respawnPlayer(world) {
   player.jumpActive = false
   player.jumpBufferTime = 0
   player.coyoteTime = 0
+
+  audio.reset()
 }
 
 function collideAABB(a, b) {
@@ -133,9 +136,9 @@ function interpolate(start, end, alpha) {
   return start + (end - start) * alpha
 }
 
-function resetWorld(world) {
+function resetWorld(world, audio) {
   world.isWon = false
-  respawnPlayer(world)
+  respawnPlayer(world, audio)
 }
 
 function createWorld() {
@@ -281,7 +284,7 @@ function createMovementSystem() {
   }
 }
 
-function createPhysicsSystem() {
+function createPhysicsSystem(audio) {
   // TODO: these consts to a config
   const jumpVelocity = -450
   const gravity = 800
@@ -314,6 +317,8 @@ function createPhysicsSystem() {
         p.jumpBufferTime = 0
         p.coyoteTime = 0
         p.jumpActive = true
+
+        audio.jump()
       }
 
       let gravityScale = 1
@@ -338,7 +343,7 @@ function createPhysicsSystem() {
   }
 }
 
-function createCollisionSystem() {
+function createCollisionSystem(audio) {
   const contactTolerance = 1 // pixels // prevents misclassification from precision and timestep error
 
   return {
@@ -349,6 +354,7 @@ function createCollisionSystem() {
       let blockedBottom = false
 
       const p = world.player
+      const wasGrounded = p.isGrounded
 
       if (p.standingOn) {
         p.x += p.standingOn.x - p.standingOn.prevX
@@ -374,6 +380,8 @@ function createCollisionSystem() {
           player.standingOn = applyPlatformMotion ? solid : null
           player.jumpActive = false
           player.vy = Math.min(player.vy, solid.vy ?? 0)
+
+          if (!wasGrounded) audio.land()
         }
         // player was below solid (prev)
         else if (player.prevY - player.halfSize >= solidPrevY + solid.halfSize - contactTolerance) {
@@ -411,6 +419,8 @@ function createCollisionSystem() {
             player.y -= collision.penetrationY
             player.isGrounded = true
             player.jumpActive = false // TODO: duplicate with grounded
+
+            if (!wasGrounded) audio.land()
           } else {
             player.y += collision.penetrationY
           }
@@ -426,22 +436,23 @@ function createCollisionSystem() {
       for (const s of world.movingSolids) handlePlayerSolidCollision(p, s, s.prevX, s.prevY, true)
       for (const s of world.solids) handlePlayerSolidCollision(p, s, s.x, s.y)
 
-      if ((blockedLeft && blockedRight) || (blockedTop && blockedBottom)) respawnPlayer(world)
+      if ((blockedLeft && blockedRight) || (blockedTop && blockedBottom)) respawnPlayer(world, audio)
     }
   }
 }
 
-function createGoalSystem() {
+function createGoalSystem(audio) {
   return {
     update(world) {
       if (!world.isWon && collideAABB(world.player, world.goal)) {
         world.isWon = true
+        audio.win()
       }
     }
   }
 }
 
-function createWorldConstraintSystem(world) {
+function createWorldConstraintSystem(world, audio) {
   const minPlayerX = world.minX + world.player.halfSize
   const maxPlayerX = world.maxX - world.player.halfSize
 
@@ -454,7 +465,7 @@ function createWorldConstraintSystem(world) {
       }
 
       if (world.player.y - world.player.halfSize > world.killPlaneY) {
-        respawnPlayer(world)
+        respawnPlayer(world, audio)
       }
     }
   }
@@ -751,14 +762,15 @@ export default function game(parent) {
   const camera = {x: 0, y: 0}
 
   const world = createWorld()
+  const audio = createAudio()
 
   const inputSystem = createInputSystem()
   const movingSolidSystem = createMovingSolidSystem()
   const movementSystem = createMovementSystem()
-  const physicsSystem = createPhysicsSystem()
-  const collisionSystem = createCollisionSystem()
-  const goalSystem = createGoalSystem()
-  const worldConstraintSystem = createWorldConstraintSystem(world)
+  const physicsSystem = createPhysicsSystem(audio)
+  const collisionSystem = createCollisionSystem(audio)
+  const goalSystem = createGoalSystem(audio)
+  const worldConstraintSystem = createWorldConstraintSystem(world, audio)
   const cameraSystem = createCameraSystem(camera)
   const renderer = createRenderer(canvas, context, world, camera)
   const renderSystem = createRenderSystem(renderer)
@@ -783,7 +795,7 @@ export default function game(parent) {
       previousSnapshot = currentSnapshot
 
       if (world.isWon && inputSystem.input.reset) {
-        resetWorld(world)
+        resetWorld(world, audio)
       } else {
         movingSolidSystem.update(world, deltaS)
         movementSystem.update(world, inputSystem.input, deltaS)
