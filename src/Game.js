@@ -112,7 +112,7 @@ function respawnPlayer(world, audio) {
   player.jumpBufferTime = 0
   player.coyoteTime = 0
 
-  audio.reset()
+  audio.respawn()
 }
 
 function collideAABB(a, b) {
@@ -446,7 +446,7 @@ function createGoalSystem(audio) {
     update(world) {
       if (!world.isWon && collideAABB(world.player, world.goal)) {
         world.isWon = true
-        audio.win()
+        audio.goal()
       }
     }
   }

@@ -1,5 +1,5 @@
 export function createAudio() {
-  const MIN_GAIN = 0.0001 // TODO: naming
+  const GAIN_EPSILON = 0.0001
 
   // TODO: this should only happen after user input, now it also happens before < results in warning
   const context = new AudioContext()
@@ -7,75 +7,114 @@ export function createAudio() {
   masterGain.gain.value = 0.2
   masterGain.connect(context.destination)
 
-  // TODO: check + naming
-  function ensureContext() {
-    if (context.state !== 'running') context.resume()
+  function ensureRunning() {
+    if (context.state === 'suspended') context.resume()
   }
 
   // TODO: do not use destructuring, also not on other places in this file
-  // playTone is good naming
-  function playTone({
-    frequency = 440,
-    duration = 0.08, // TODO: naming. Should become sustain?
-    delay = 0, // TODO: naming
-    type = 'square',
-    volume = 0.6,
-    attack = 0.005,
-    release = 0.04,
-    slideTo = null // TODO: naming
-  } = {}) {
-    const now = context.currentTime + delay // TODO: naming
+  function playTone(options) {
+    const {
+      frequency = 440,
+      sustain = 0.08,
+      type = 'square',
+      volume = 0.6,
+      attack = 0.005,
+      release = 0.04,
+      startAt,
+      targetFrequency = null,
+      filterFrequency = 1200, // TODO: naming
+      doFilter = false // TODO: naming + does it makes sense?
+    } = options
+
+    const attackEndAt = startAt + attack
+    const releaseStartAt = attackEndAt + sustain
+    const stopAt = releaseStartAt + release
+
     const oscillator = context.createOscillator()
     const gain = context.createGain()
 
     oscillator.type = type
-    oscillator.frequency.setValueAtTime(frequency, now)
-    oscillator.connect(gain)
+    oscillator.frequency.setValueAtTime(frequency, startAt)
+
+    if (targetFrequency !== null) oscillator.frequency.exponentialRampToValueAtTime(targetFrequency, releaseStartAt)
+
+    gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
+    gain.gain.linearRampToValueAtTime(volume, attackEndAt)
+    gain.gain.setValueAtTime(volume, releaseStartAt)
+    gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, stopAt)
+
+    if (doFilter) {
+      const filter = context.createBiquadFilter()
+      filter.type = 'lowpass'
+      filter.frequency.setValueAtTime(filterFrequency, startAt)
+      filter.Q.setValueAtTime(Math.SQRT1_2, startAt)
+
+      oscillator.connect(filter)
+      filter.connect(gain)
+    } else oscillator.connect(gain)
+
     gain.connect(masterGain)
 
-    // TOD: add const now + duration and with release
-
-    if (slideTo) oscillator.frequency.exponentialRampToValueAtTime(slideTo, now + duration)
-
-    gain.gain.setValueAtTime(MIN_GAIN, now)
-    gain.gain.linearRampToValueAtTime(volume, now + attack)
-    gain.gain.exponentialRampToValueAtTime(MIN_GAIN, now + duration + release)
-
-    oscillator.start(now)
-    oscillator.stop(now + duration + release)
+    oscillator.start(startAt)
+    oscillator.stop(stopAt)
   }
 
-  // TODO: naming
   function jump() {
-    ensureContext() // TODO: should happen everytime? same for other functions here
-    playTone({frequency: 520, slideTo: 760, duration: 0.07, type: 'square', volume: 0.18})
+    ensureRunning() // TODO: should happen every time? same for other functions here
+    playTone({
+      frequency: 520,
+      targetFrequency: 760,
+      sustain: 0.07,
+      type: 'square',
+      volume: 0.18,
+      startAt: context.currentTime
+    })
   }
 
-  // TODO: naming
   function land() {
-    ensureContext()
-    playTone({frequency: 180, slideTo: 120, duration: 0.04, type: 'square', volume: 0.12})
+    ensureRunning()
+    playTone({
+      frequency: 180,
+      targetFrequency: 120,
+      sustain: 0.04,
+      type: 'square',
+      volume: 0.12,
+      startAt: context.currentTime
+    })
   }
 
-  // TODO: naming
-  function reset() {
-    ensureContext()
-    playTone({frequency: 300, slideTo: 90, duration: 0.12, type: 'sawtooth', volume: 0.15})
+  function respawn() {
+    ensureRunning()
+    playTone({
+      frequency: 300,
+      targetFrequency: 90,
+      sustain: 0.12,
+      type: 'sawtooth',
+      volume: 0.15,
+      startAt: context.currentTime
+    })
   }
 
-  // TODO: naming
-  function win() {
-    ensureContext()
+  function goal() {
+    ensureRunning()
 
-    const notes = [523.25, 659.25, 783.99, 1046.5] // TODO: naming
-    let delay = 0 // TODO: naming
+    const now = context.currentTime
+    let offset = 0
 
-    // TODO: naming
-    for (const note of notes) {
-      playTone({frequency: note, duration: 0.09, type: 'square', volume: 0.6, delay, attack: 0.01, release: 0.05})
-      delay += 0.09
+    // noteFrequencies
+    for (const frequency of [523.25, 659.25, 783.99, 1046.5]) {
+      playTone({
+        frequency,
+        sustain: 0.09,
+        type: 'square',
+        volume: 0.6,
+        startAt: now + offset,
+        attack: 0.01,
+        release: 0.05
+      })
+      offset += 0.09
     }
   }
 
-  return {jump, land, reset, win}
+  return {goal, jump, land, respawn}
 }
