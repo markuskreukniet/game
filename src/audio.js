@@ -1,6 +1,16 @@
 export function createAudio() {
   const GAIN_EPSILON = 0.0001
 
+  // TODO: comment
+  // The delays should be between 10 ms en 36 ms (10 and 35 is also allowed).
+  // When 4, 5, 6, and 7 in step to 10, we stop at 32 ms.
+  // When we start at 5, 6, 7, 8, then we go too high
+  // it makes more sense to add 4, 6, 5, 7, to make it less math like
+  // After the delays we can add 1 to every number.
+  // Also it is good te prefer 3 delays low, 1 mid, and 1 high
+  // And and there should not be equal steps between the delays
+  const INTERNAL_DELAYS = [0.011, 0.015, 0.021, 0.026, 0.033] // TODO: naming
+
   // TODO: this should only happen after user input, now it also happens before < results in warning
   const context = new AudioContext()
   const masterGain = context.createGain()
@@ -22,8 +32,8 @@ export function createAudio() {
       release = 0.04,
       startAt,
       targetFrequency = null,
-      filterFrequency = 1200, // TODO: naming
-      doFilter = false // TODO: naming + does it makes sense?
+      cutoffHz = 1200,
+      filterStageCount = 1
     } = options
 
     const attackEndAt = startAt + attack
@@ -43,16 +53,19 @@ export function createAudio() {
     gain.gain.setValueAtTime(volume, releaseStartAt)
     gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, stopAt)
 
-    if (doFilter) {
+    let lastNode = oscillator
+
+    for (let i = 0; i < filterStageCount; i++) {
       const filter = context.createBiquadFilter()
       filter.type = 'lowpass'
-      filter.frequency.setValueAtTime(filterFrequency, startAt)
-      filter.Q.setValueAtTime(Math.SQRT1_2, startAt)
+      filter.frequency.value = cutoffHz
+      filter.Q.value = Math.SQRT1_2
 
-      oscillator.connect(filter)
-      filter.connect(gain)
-    } else oscillator.connect(gain)
+      lastNode.connect(filter)
+      lastNode = filter
+    }
 
+    lastNode.connect(gain)
     gain.connect(masterGain)
 
     oscillator.start(startAt)
