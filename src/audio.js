@@ -1,6 +1,15 @@
 export function createAudio() {
   const GAIN_EPSILON = 0.0001
 
+  // TODO: reverb limitations:
+  // 1. No diffusion
+  // 2. Identical feedback for all comb filters
+  // 3. No pre-delay
+  // 4. No stereo spread
+  // (not a problem maybe) 5. Energy can build up at long decay
+  // 6. no difference between early reflections and late tail (if it is the correct name)
+  // 7. short reverbs could use 3 internal delays instead of always 5
+
   // TODO: comment
   // The delays should be between 10 ms en 36 ms (10 and 35 is also allowed).
   // When 4, 5, 6, and 7 in step to 10, we stop at 32 ms.
@@ -9,13 +18,69 @@ export function createAudio() {
   // After the delays we can add 1 to every number.
   // Also it is good te prefer 3 delays low, 1 mid, and 1 high
   // And and there should not be equal steps between the delays
-  const INTERNAL_DELAYS = [0.011, 0.015, 0.021, 0.026, 0.033] // TODO: naming
+  const EARLY_REFLECTION_DELAYS = [0.011, 0.015, 0.021, 0.026, 0.033] // TODO: naming
 
   // TODO: this should only happen after user input, now it also happens before < results in warning
   const context = new AudioContext()
   const masterGain = context.createGain()
   masterGain.gain.value = 0.2
   masterGain.connect(context.destination)
+
+  const reverbSend = context.createGain()
+  const reverbReturn = context.createGain()
+
+  reverbReturn.gain.value = 0.6
+  reverbReturn.connect(masterGain)
+
+  function createCombFilter(delay, feedbackCoefficient) {
+    const delayNode = context.createDelay()
+    const feedbackGainNode = context.createGain()
+
+    delayNode.delayTime.value = delay
+    feedbackGainNode.gain.value = feedbackCoefficient
+
+    delayNode.connect(feedbackGainNode)
+    feedbackGainNode.connect(delayNode)
+
+    return delayNode
+  }
+
+  // namings are good // TODO: how does it work?
+  function createSchroederReverb(decaySeconds) {
+    const reverbIn = context.createGain()
+    const reverbOut = context.createGain()
+    const combSum = context.createGain()
+
+    const combFilterDelays = [0.03, 0.037, 0.041, 0.043]
+    const feedbackCoefficient = Math.exp(-3 / decaySeconds)
+
+    for (const delay of combFilterDelays) {
+      const combFilterNode = createCombFilter(delay, feedbackCoefficient)
+      reverbIn.connect(combFilterNode)
+      combFilterNode.connect(combSum)
+    }
+
+    // TODO: should be 48 db
+    const highpassNode = context.createBiquadFilter()
+    highpassNode.type = 'highpass'
+    highpassNode.frequency.value = 250
+
+    const lowpassNode = context.createBiquadFilter()
+    lowpassNode.type = 'lowpass'
+    lowpassNode.frequency.value = 6000
+
+    // highpass first, then lowpass
+    combSum.connect(highpassNode)
+    highpassNode.connect(lowpassNode)
+    lowpassNode.connect(reverbOut)
+
+    return {reverbIn, reverbOut}
+  }
+
+  const reverbNode = createSchroederReverb(20.5)
+
+  reverbSend.connect(reverbNode.reverbIn)
+  reverbNode.reverbOut.connect(reverbReturn)
 
   function ensureRunning() {
     if (context.state === 'suspended') context.resume()
@@ -67,6 +132,12 @@ export function createAudio() {
 
     lastNode.connect(gain)
     gain.connect(masterGain)
+
+    const sendGain = context.createGain()
+    sendGain.gain.value = 0.4
+
+    gain.connect(sendGain)
+    sendGain.connect(reverbSend)
 
     oscillator.start(startAt)
     oscillator.stop(stopAt)
