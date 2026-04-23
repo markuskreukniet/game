@@ -4,14 +4,13 @@ export function createAudio() {
   // TODO: reverb limitations:
   // 1. No diffusion
   // 2. Identical feedback for all comb filters
-  // 3. No pre-delay
-  // 4. No stereo spread
-  // (not a problem maybe) 5. Energy can build up at long decay
-  // 6. no difference between early reflections and late tail (if it is the correct name)
-  // 7. short reverbs could use 3 internal delays instead of always 5
+  // 3. No stereo spread
+  // (not a problem maybe) 4. Energy can build up at long decay
+  // 5. no difference between early reflections and late tail (if it is the correct name)
+  // 6. short reverbs could use 3 internal delays instead of always 5
 
   // TODO: comment
-  // The delays should be between 10 ms en 36 ms (10 and 35 is also allowed).
+  // The delays should be between 10 ms en 35 ms (10 and 35 is also allowed).
   // When 4, 5, 6, and 7 in step to 10, we stop at 32 ms.
   // When we start at 5, 6, 7, 8, then we go too high
   // it makes more sense to add 4, 6, 5, 7, to make it less math like
@@ -46,16 +45,22 @@ export function createAudio() {
     return delayNode
   }
 
-  // namings are good in whole function // TODO: how does it work?
-  function createSchroederReverb(decaySeconds) {
+  // TODO: first delay starts not precisely when pre-delay ends, which we can fix with early reflections?
+  function createSchroederReverb(preDelaySeconds, decaySeconds) {
     const reverbIn = context.createGain()
     const reverbOut = context.createGain()
     const combSum = context.createGain()
 
+    const preDelayNode = context.createDelay()
+    preDelayNode.delayTime.value = preDelaySeconds
+    reverbIn.connect(preDelayNode)
+
     for (const delay of [0.03, 0.037, 0.041, 0.043]) /* combFilterDelays */ {
-      // Uses Euler's number (e) to compute feedback for RT60 decay; -3 approximates a natural-sounding reverb tail. // TODO: comment
-      const combFilterNode = createCombFilter(delay, Math.exp((-3 * delay) / decaySeconds))
-      reverbIn.connect(combFilterNode)
+      // Maps decay time to per-delay feedback; -3 shapes a natural decay.
+      const feedbackCoefficient = Math.exp((-3 * delay) / decaySeconds)
+
+      const combFilterNode = createCombFilter(delay, feedbackCoefficient)
+      preDelayNode.connect(combFilterNode)
       combFilterNode.connect(combSum)
     }
 
@@ -79,7 +84,7 @@ export function createAudio() {
     return inputNode
   }
 
-  const reverbNode = createSchroederReverb(3)
+  const reverbNode = createSchroederReverb(1, 2)
 
   reverbSend.connect(reverbNode.reverbIn)
   reverbNode.reverbOut.connect(reverbReturn)
