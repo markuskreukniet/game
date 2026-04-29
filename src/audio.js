@@ -2,12 +2,9 @@ export function createAudio() {
   const GAIN_EPSILON = 0.0001
 
   // TODO: reverb limitations:
-  // 1. No diffusion
-  // 2. Identical feedback for all comb filters
-  // 3. No stereo spread
-  // (not a problem maybe) 4. Energy can build up at long decay
-  // 5. no difference between early reflections and late tail (if it is the correct name)
-  // 6. short reverbs could use 3 internal delays instead of always 5
+  // 1. Identical feedback for all comb filters
+  // (not a problem maybe) 2. Energy can build up at long decay
+  // 3. short reverbs could use 3 internal delays instead of always 5
 
   // TODO: this should only happen after user input, now it also happens before < results in warning
   const context = new AudioContext()
@@ -21,13 +18,34 @@ export function createAudio() {
   reverbReturn.gain.value = 0.6
   reverbReturn.connect(masterGain)
 
+  // TODO: check completely with namings // createDiffuser is good naming
+  function createDiffuser(delayS, gain) {
+    const input = context.createGain() // good naming
+    const output = context.createGain() // good naming
+
+    const feedbackDelay = createFeedbackDelay(delayS, gain) // good naming
+    const feedforwardGain = context.createGain() // good naming
+
+    feedforwardGain.gain.value = -gain
+
+    input.connect(feedbackDelay)
+    input.connect(feedforwardGain)
+
+    feedbackDelay.connect(output)
+    feedforwardGain.connect(output)
+    input.connect(output) // Non-canonical: dry path added; not a true all-pass filter.
+
+    return {input, output}
+  }
+
+  // createFeedbackDelay is good naming
   // Feedback delay produces decaying echoes.
-  function createCombFilter(delay, feedbackCoefficient) {
+  function createFeedbackDelay(delayS, gain) {
     const delayNode = context.createDelay()
     const feedbackGainNode = context.createGain()
 
-    delayNode.delayTime.value = delay
-    feedbackGainNode.gain.value = feedbackCoefficient
+    delayNode.delayTime.value = delayS
+    feedbackGainNode.gain.value = gain
 
     delayNode.connect(feedbackGainNode)
     feedbackGainNode.connect(delayNode)
@@ -35,68 +53,95 @@ export function createAudio() {
     return delayNode
   }
 
-  function createSchroederReverb(preDelaySeconds, decaySeconds) {
-    // TODO: comment
-    // The delays should be between 10 ms and 50 ms (10 and 50 is also allowed).
-    // When we add 7, 8, 9, 10 at 10, we have a better range than we would start with 6 or 8.
-    // Adding like 7, 8, 10, 9 sounds better (less like math).
-    // We can add 3 to every number to space it better between 10 and 50 ms.
-    // Also, the problem of starting at 10 and a 10 interval is then gone (we should avoid equal intervals).
-    // Plus, it is good te prefer 3 delays low, 1 mid, and 1 high.
-    const earlyReflectionDelays = [0.013, 0.02, 0.028, 0.038, 0.047]
+  function createAlgorithmicReverb(preDelayS, decayS, stereoDelayOffset, pan) {
+    // The early reflections range is 10–50 ms (inclusive), and the late reflections range is 50–120 ms (inclusive).
+    // At the moment, the reverb uses 5 delay times for early reflections, and 5 delay times for late reflections.
+    // For 5 delay times we prefer a maximum range with 3 low, 1 mid, and 1 high.
+    // However, when a delay starts at 10 ms or 119 ms, there is almost no room to add or subtract an offset.
+    // Subtracting 1 ms from 10 ms or adding 2 ms to 119 ms pushes the value outside the valid range.
+    // We should avoid equal intervals between reflections to reduce resonances and ringing artifacts.
+    // The early reflections should include a 0 ms delay (not in the array)
+    // so they begin immediately after the pre-delay.
+    // Delay times can be constructed as a sequence of cumulative sums,
+    // where each value is obtained by adding increasing increments
+    // (e.g. start at a base value, then add +11, +12, +13, ...).
 
-    // TODO: comment
-    // The delays should be between 10 ms and 120 ms (10 and 120 is also allowed).
-    // When we add 16, 17, 18, 19 at 50, we have the best range from 50 to 120, but we can't randomize it/can't add stereo offset
-    // Adding subtracting 1 from 50 or adding 1 to 120 makes a delay to short or too long.
-    // When we add 15, 16, 17, 18 at 50, we have a range that we can randomize.
-    // Adding like 15, 16, 18, 17 sounds better (less like math).
-    // We can add 2 to every number to space it better between 50 and 120 ms.
-    // Plus, it is good te prefer 3 delays low, 1 mid, and 1 high.
-    const lateReflectionDelays = [0.052, 0.067, 0.083, 0.101, 0.118]
+    // For early reflections, start the second delay at 10 ms,
+    // then build the following delays using cumulative sums with increments starting at +12.
+    // This gives 10 ms, 22 ms, 35 ms, and 49 ms, which leaves little room for adding or subtracting an offset.
+    // Therefore, use increments starting at +11 instead, resulting in 10 ms, 21 ms, 33 ms, and 46 ms.
+    // Reordering the increments to 10 + 11 + 13 + 12 makes the spacing less regular (10 ms, 21 ms, 34 ms, and 46 ms).
+    // Adding 2 ms to each value then improves the spacing, resulting in 12 ms, 23 ms, 36 ms, and 48 ms.
 
-    const reverbIn = context.createGain()
-    const reverbOut = context.createGain()
+    // For late reflections, start the first delay at 50 ms,
+    // then build the following delays using cumulative sums with increments starting at +16.
+    // This gives 50 ms, 66 ms, 83 ms, 101 ms, and 120 ms, which leaves little room for adding or subtracting an offset.
+    // Therefore, use increments starting at +15 instead, resulting in 50 ms, 65 ms, 81 ms, 98 ms, and 116 ms.
+    // Reordering the increments to 15 + 16 + 17 + 19 + 18 makes the spacing less regular
+    // (50 ms, 65 ms, 81 ms, 99 ms, and 116 ms).
+    // Adding 2 ms to each value then improves the spacing, resulting in 52 ms, 67 ms, 83 ms, 101 ms, and 118 ms.
+    const earlyReflectionDelayTimes = [0.012, 0.023, 0.036, 0.048].map(s => s + stereoDelayOffset)
+    const lateReflectionDelayTimes = [0.052, 0.067, 0.083, 0.101, 0.118].map(s => s + stereoDelayOffset)
+
+    const input = context.createGain()
+    const output = context.createGain()
     const combSum = context.createGain()
     const earlyReflections = context.createGain()
     const preDelayNode = context.createDelay()
 
-    // Early reflections are slightly brighter // TODO: comment
+    // Mix balance: early reflections are slightly louder than the reverb tail to preserve clarity and reduce diffusion
     earlyReflections.gain.value = 1
     combSum.gain.value = 0.8
 
-    preDelayNode.delayTime.value = Math.max(0, preDelaySeconds - earlyReflectionDelays[0])
-    reverbIn.connect(preDelayNode)
+    preDelayNode.delayTime.value = preDelayS
+    input.connect(preDelayNode)
 
-    for (let i = 0; i < earlyReflectionDelays.length; i++) {
+    // Use ~6–10 ms for diffusion. Avoid matching early/late reflection delays to prevent ringing.
+    // Shorter = smoother; too short reduces effectiveness.
+    // Gain ~0.6–0.7 gives good diffusion; 0.65 is a safe midpoint.
+    const diffuser = createDiffuser(0.007, 0.65) // TODO: check // good naming // good comments
+    preDelayNode.connect(diffuser.input)
+
+    function addEarlyReflectionTap(delayS, gain) {
       const delayNode = context.createDelay()
       const gainNode = context.createGain()
 
-      delayNode.delayTime.value = earlyReflectionDelays[i]
-      gainNode.gain.value = Math.exp(-i * 0.2)
+      delayNode.delayTime.value = delayS
+      gainNode.gain.value = gain
 
       preDelayNode.connect(delayNode)
       delayNode.connect(gainNode)
       gainNode.connect(earlyReflections)
     }
 
-    for (const delay of lateReflectionDelays) {
-      // Maps decay time to per-delay feedback; -3 shapes a natural decay.
-      const feedbackCoefficient = Math.exp((-3 * delay) / decaySeconds)
+    addEarlyReflectionTap(0, 0.5)
 
-      const combFilterNode = createCombFilter(delay, feedbackCoefficient)
-      preDelayNode.connect(combFilterNode)
+    for (let i = 0; i < earlyReflectionDelayTimes.length; i++) {
+      addEarlyReflectionTap(earlyReflectionDelayTimes[i], Math.exp(-i * 0.2))
+    }
+
+    for (const delay of lateReflectionDelayTimes) {
+      // Maps decay time to per-delay feedback; -3 shapes a natural decay.
+      const feedbackCoefficient = Math.exp((-3 * delay) / decayS)
+
+      const combFilterNode = createFeedbackDelay(delay, feedbackCoefficient)
+      diffuser.output.connect(combFilterNode) // TODO: check
       combFilterNode.connect(combSum)
     }
 
-    const reverbSum = context.createGain() // TODO: naming + placement
-    earlyReflections.connect(reverbSum)
-    combSum.connect(reverbSum)
+    const reverbMix = context.createGain() // TODO: placement // good naming
+    earlyReflections.connect(reverbMix)
+    combSum.connect(reverbMix)
 
-    // highpass first, then lowpass // TODO: comment
-    chainFilters(chainFilters(reverbSum, 'highpass', 250, 4), 'lowpass', 6000, 1).connect(reverbOut)
+    const panner = context.createStereoPanner()
+    panner.pan.value = pan
 
-    return {reverbIn, reverbOut} // TODO: is it needed to send object back?
+    // Highpass then lowpass: remove low-end buildup before shaping the highs
+    chainFilters(chainFilters(reverbMix, 'highpass', 250, 4), 'lowpass', 6000, 1).connect(panner)
+
+    panner.connect(output)
+
+    return {input, output} // TODO: is it needed to send object back?
   }
 
   function chainFilters(inputNode, type, cutoffHz, filterStageCount) {
@@ -113,14 +158,28 @@ export function createAudio() {
     return inputNode
   }
 
-  const reverbNode = createSchroederReverb(1, 2)
+  // connectStereoReverbBus is good naming
+  function connectStereoReverbBus(preDelayS, decayS, node) {
+    // 4 ms difference (2 * 0.002) is a good balance. 6 ms becomes more a stereo effect than natural sounding. // TODO: comment
+    // panning between 0.3 and 0.5 sounds natural and balanced // TODO: comment
+    // TODO: not efficient two times createAlgorithmicReverb? use haas effect instead?
+    const reverbL = createAlgorithmicReverb(preDelayS, decayS, -0.002, -0.5) // good naming
+    const reverbR = createAlgorithmicReverb(preDelayS, decayS, 0.002, 0.5) // good naming
 
-  reverbSend.connect(reverbNode.reverbIn)
-  reverbNode.reverbOut.connect(reverbReturn)
+    reverbSend.connect(reverbL.input)
+    reverbSend.connect(reverbR.input)
+
+    reverbL.output.connect(node)
+    reverbR.output.connect(node)
+  }
+
+  connectStereoReverbBus(0.2, 2, reverbReturn)
 
   function ensureRunning() {
     if (context.state === 'suspended') context.resume()
   }
+
+  // TODO: // sub-bass, bass, midrange
 
   // TODO: do not use destructuring, also not on other places in this file
   function playTone(options) {
@@ -128,33 +187,51 @@ export function createAudio() {
       frequency = 440,
       sustain = 0.08,
       type = 'square',
-      volume = 0.6,
+      volume = 0.6, // TODO: gain is better naming?
       attack = 0.005,
       release = 0.04,
       startAt,
       targetFrequency = null,
       cutoffHz = 1200,
-      filterStageCount = 1
+      filterStageCount = 1,
+      numberOfVoices = 2 // TODO: naming
     } = options
 
     const attackEndAt = startAt + attack
     const releaseStartAt = attackEndAt + sustain
     const stopAt = releaseStartAt + release
 
-    const oscillator = context.createOscillator()
-    const gain = context.createGain()
+    const gain = context.createGain() // TODO: naming
+    const oscillatorMix = context.createGain() // TODO: naming
 
-    oscillator.type = type
-    oscillator.frequency.setValueAtTime(frequency, startAt)
+    oscillatorMix.gain.value = 1 / numberOfVoices
+    const numberOfSideVoices = Math.trunc(numberOfVoices * 0.5) // TODO: naming
 
-    if (targetFrequency !== null) oscillator.frequency.exponentialRampToValueAtTime(targetFrequency, releaseStartAt)
+    const detuneValues = [] // TODO: naming // TODO: is it efficient?
+    for (let i = numberOfSideVoices; i >= 1; i--) detuneValues.push(i * -5)
+    if (numberOfVoices % 2 === 1) detuneValues.push(0)
+    for (let i = 1; i <= numberOfSideVoices; i++) detuneValues.push(i * 5)
+
+    // TODO: is it efficient?
+    for (let i = 0; i < numberOfVoices; i++) {
+      const oscillator = context.createOscillator()
+      oscillator.type = type
+      oscillator.frequency.setValueAtTime(frequency, startAt)
+      oscillator.detune.value = detuneValues[i]
+
+      if (targetFrequency !== null) oscillator.frequency.exponentialRampToValueAtTime(targetFrequency, releaseStartAt)
+
+      oscillator.connect(oscillatorMix)
+      oscillator.start(startAt)
+      oscillator.stop(stopAt)
+    }
 
     gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
     gain.gain.linearRampToValueAtTime(volume, attackEndAt)
     gain.gain.setValueAtTime(volume, releaseStartAt)
     gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, stopAt)
 
-    chainFilters(oscillator, 'lowpass', cutoffHz, filterStageCount).connect(gain)
+    chainFilters(oscillatorMix, 'lowpass', cutoffHz, filterStageCount).connect(gain)
 
     gain.connect(masterGain)
 
@@ -163,9 +240,6 @@ export function createAudio() {
 
     gain.connect(sendGain)
     sendGain.connect(reverbSend)
-
-    oscillator.start(startAt)
-    oscillator.stop(stopAt)
   }
 
   function jump() {
@@ -210,8 +284,7 @@ export function createAudio() {
     const now = context.currentTime
     let offset = 0
 
-    // noteFrequencies
-    for (const frequency of [523.25, 659.25, 783.99, 1046.5]) {
+    for (const frequency of [523.25, 659.25, 783.99, 1046.5]) /* noteFrequencies */ {
       playTone({
         frequency,
         sustain: 0.09,
