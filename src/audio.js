@@ -18,24 +18,18 @@ export function createAudio() {
   reverbReturn.gain.value = 0.6
   reverbReturn.connect(masterGain)
 
-  // TODO: check completely with namings // TODO: use createCombFilter function here?
+  // TODO: check completely with namings
   function createAllPassFilter(delayS, gain) {
     const input = context.createGain()
     const output = context.createGain()
 
-    const delay = context.createDelay()
-    const feedback = context.createGain()
+    const delay = createFeedbackDelay(delayS, gain)
     const feedforward = context.createGain()
 
-    delay.delayTime.value = delayS
-    feedback.gain.value = gain
     feedforward.gain.value = -gain
 
     input.connect(delay)
     input.connect(feedforward)
-
-    delay.connect(feedback)
-    feedback.connect(delay)
 
     delay.connect(output)
     feedforward.connect(output)
@@ -44,8 +38,9 @@ export function createAudio() {
     return {input, output}
   }
 
+  // createFeedbackDelay is good naming
   // Feedback delay produces decaying echoes.
-  function createCombFilter(delayS, gain) {
+  function createFeedbackDelay(delayS, gain) {
     const delayNode = context.createDelay()
     const feedbackGainNode = context.createGain()
 
@@ -126,7 +121,7 @@ export function createAudio() {
       // Maps decay time to per-delay feedback; -3 shapes a natural decay.
       const feedbackCoefficient = Math.exp((-3 * delay) / decayS)
 
-      const combFilterNode = createCombFilter(delay, feedbackCoefficient)
+      const combFilterNode = createFeedbackDelay(delay, feedbackCoefficient)
       diffusion.output.connect(combFilterNode) // TODO: check
       combFilterNode.connect(combSum)
     }
