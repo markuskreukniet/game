@@ -3,8 +3,7 @@ export function createAudio() {
 
   // TODO: reverb limitations:
   // 1. Identical feedback for all comb filters
-  // (not a problem maybe) 2. Energy can build up at long decay
-  // 3. short reverbs could use 3 internal delays instead of always 5
+  // 2. short reverbs could use 3 internal delays instead of always 5
 
   // TODO: this should only happen after user input, now it also happens before < results in warning
   const context = new AudioContext()
@@ -53,6 +52,8 @@ export function createAudio() {
     return delayNode
   }
 
+  // Limitation: Long pre-delay values can cause the reverb to become nearly inaudible for short
+  // stereo-detuned/panned transient sounds because the sparse feedback network receives too little excitation energy.
   function createAlgorithmicReverb(preDelayS, decayS, stereoDelayOffset, pan) {
     // The early reflections range is 10–50 ms (inclusive), and the late reflections range is 50–120 ms (inclusive).
     // At the moment, the reverb uses 5 delay times for early reflections, and 5 delay times for late reflections.
@@ -173,7 +174,7 @@ export function createAudio() {
     reverbR.output.connect(node)
   }
 
-  connectStereoReverbBus(0.2, 2, reverbReturn)
+  connectStereoReverbBus(0.02, 2, reverbReturn)
 
   function ensureRunning() {
     if (context.state === 'suspended') context.resume()
@@ -205,23 +206,30 @@ export function createAudio() {
     const oscillatorMix = context.createGain() // TODO: naming
 
     oscillatorMix.gain.value = 1 / numberOfVoices
-    const numberOfSideVoices = Math.trunc(numberOfVoices * 0.5) // TODO: naming
 
-    const detuneValues = [] // TODO: naming // TODO: is it efficient?
-    for (let i = numberOfSideVoices; i >= 1; i--) detuneValues.push(i * -5)
-    if (numberOfVoices % 2 === 1) detuneValues.push(0)
-    for (let i = 1; i <= numberOfSideVoices; i++) detuneValues.push(i * 5)
+    const centerIndex = Math.trunc(numberOfVoices / 2) // TODO: naming
+    const evenNumberOfVoices = numberOfVoices % 2 === 0 // TODO: naming
 
-    // TODO: is it efficient?
     for (let i = 0; i < numberOfVoices; i++) {
+      let offset = i - centerIndex
+
+      if (evenNumberOfVoices && offset >= 0) {
+        offset += 1
+      }
+
       const oscillator = context.createOscillator()
       oscillator.type = type
       oscillator.frequency.setValueAtTime(frequency, startAt)
-      oscillator.detune.value = detuneValues[i]
+      oscillator.detune.value = offset * 5
 
       if (targetFrequency !== null) oscillator.frequency.exponentialRampToValueAtTime(targetFrequency, releaseStartAt)
 
-      oscillator.connect(oscillatorMix)
+      const panner = context.createStereoPanner() // TODO: naming
+      panner.pan.value = offset * 0.2
+
+      oscillator.connect(panner)
+      panner.connect(oscillatorMix)
+
       oscillator.start(startAt)
       oscillator.stop(stopAt)
     }
