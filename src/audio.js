@@ -17,13 +17,12 @@ export function createAudio() {
   reverbReturn.gain.value = 0.6
   reverbReturn.connect(masterGain)
 
-  // TODO: check completely with namings // createDiffuser is good naming
   function createDiffuser(delayS, gain) {
-    const input = context.createGain() // good naming
-    const output = context.createGain() // good naming
+    const input = context.createGain()
+    const output = context.createGain()
 
-    const feedbackDelay = createFeedbackDelay(delayS, gain) // good naming
-    const feedforwardGain = context.createGain() // good naming
+    const feedbackDelay = createFeedbackDelay(delayS, gain)
+    const feedforwardGain = context.createGain()
 
     feedforwardGain.gain.value = -gain
 
@@ -37,7 +36,6 @@ export function createAudio() {
     return {input, output}
   }
 
-  // createFeedbackDelay is good naming
   // Feedback delay produces decaying echoes.
   function createFeedbackDelay(delayS, gain) {
     const delayNode = context.createDelay()
@@ -100,7 +98,7 @@ export function createAudio() {
     // Use ~6–10 ms for diffusion. Avoid matching early/late reflection delays to prevent ringing.
     // Shorter = smoother; too short reduces effectiveness.
     // Gain ~0.6–0.7 gives good diffusion; 0.65 is a safe midpoint.
-    const diffuser = createDiffuser(0.007, 0.65) // TODO: check // good naming // good comments
+    const diffuser = createDiffuser(0.007, 0.65)
     preDelayNode.connect(diffuser.input)
 
     function addEarlyReflectionTap(delayS, gain) {
@@ -126,7 +124,7 @@ export function createAudio() {
       const feedbackCoefficient = Math.exp((-3 * delay) / decayS)
 
       const combFilterNode = createFeedbackDelay(delay, feedbackCoefficient)
-      diffuser.output.connect(combFilterNode) // TODO: check
+      diffuser.output.connect(combFilterNode)
       combFilterNode.connect(combSum)
     }
 
@@ -159,13 +157,12 @@ export function createAudio() {
     return inputNode
   }
 
-  // connectStereoReverbBus is good naming
   function connectStereoReverbBus(preDelayS, decayS, node) {
-    // 4 ms difference (2 * 0.002) is a good balance. 6 ms becomes more a stereo effect than natural sounding. // TODO: comment
-    // panning between 0.3 and 0.5 sounds natural and balanced // TODO: comment
+    // 4 ms difference (2 * 0.002) is a good balance. 6 ms sounds more like a stereo effect than natural spaciousness.
+    // Panning between 0.3 and 0.5 sounds natural without sounding too wide.
     // TODO: not efficient two times createAlgorithmicReverb? use haas effect instead?
-    const reverbL = createAlgorithmicReverb(preDelayS, decayS, -0.002, -0.5) // good naming
-    const reverbR = createAlgorithmicReverb(preDelayS, decayS, 0.002, 0.5) // good naming
+    const reverbL = createAlgorithmicReverb(preDelayS, decayS, -0.002, -0.5)
+    const reverbR = createAlgorithmicReverb(preDelayS, decayS, 0.002, 0.5)
 
     reverbSend.connect(reverbL.input)
     reverbSend.connect(reverbR.input)
@@ -183,6 +180,7 @@ export function createAudio() {
   // TODO: // sub-bass, bass, midrange
 
   // TODO: do not use destructuring, also not on other places in this file
+  // TODO: reusing oscillators instead of creating them for every note is more efficient
   function playTone(options) {
     const {
       frequency = 440,
