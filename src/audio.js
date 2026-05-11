@@ -50,10 +50,44 @@ export function createAudio() {
     return delayNode
   }
 
-  // Limitation: Long pre-delay values can cause the reverb to become nearly inaudible for short
-  // stereo-detuned/panned transient sounds because the sparse feedback network receives too little excitation energy.
-  // TODO: still good naming the function?
-  function createAlgorithmicReverb(decayS, stereoDelayOffset, pan) {
+  // TODO: check with namings
+  function createMidSideSplit(input) {
+    const splitter = context.createChannelSplitter(2)
+
+    input.connect(splitter)
+
+    // MID = (L + R) * 0.5
+    const midL = context.createGain()
+    const midR = context.createGain()
+    const mid = context.createGain()
+
+    midL.gain.value = 0.5
+    midR.gain.value = 0.5
+
+    splitter.connect(midL, 0)
+    splitter.connect(midR, 1)
+
+    midL.connect(mid)
+    midR.connect(mid)
+
+    // SIDE = (L - R) * 0.5
+    const sideL = context.createGain()
+    const sideR = context.createGain()
+    const side = context.createGain()
+
+    sideL.gain.value = 0.5
+    sideR.gain.value = -0.5
+
+    splitter.connect(sideL, 0)
+    splitter.connect(sideR, 1)
+
+    sideL.connect(side)
+    sideR.connect(side)
+
+    return {mid, side}
+  }
+
+  function createReverbBranch(decayS, stereoDelayOffset, pan) {
     // The early reflections range is 10–50 ms (inclusive), and the late reflections range is 50–120 ms (inclusive).
     // At the moment, the reverb uses 5 delay times for early reflections, and 5 delay times for late reflections.
     // For 5 delay times we prefer a maximum range with 3 low, 1 mid, and 1 high.
@@ -154,22 +188,32 @@ export function createAudio() {
     return inputNode
   }
 
+  // TODO: test mid only and side only < it works + check changes
   function connectStereoReverbBus(preDelayS, decayS, node) {
-    const preDelay = context.createDelay()
-    preDelay.delayTime.value = preDelayS
-    reverbSend.connect(preDelay)
+    const midPreDelay = context.createDelay() // TODO: naming
+    midPreDelay.delayTime.value = preDelayS
+
+    const sidePreDelay = context.createDelay() // TODO: naming
+    sidePreDelay.delayTime.value = preDelayS
+
+    const midSide = createMidSideSplit(reverbSend) // TODO: naming
+    midSide.mid.connect(midPreDelay)
+    midSide.side.connect(sidePreDelay)
 
     // 4 ms difference (2 * 0.002) is a good balance. 6 ms sounds more like a stereo effect than natural spaciousness.
     // Panning between 0.3 and 0.5 sounds natural without sounding too wide.
-    // TODO: not efficient two times createAlgorithmicReverb? use haas effect instead?
-    const reverbL = createAlgorithmicReverb(decayS, -0.002, -0.5)
-    const reverbR = createAlgorithmicReverb(decayS, 0.002, 0.5)
+    const reverbL = createReverbBranch(decayS, -0.002, -0.5)
+    const reverbR = createReverbBranch(decayS, 0.002, 0.5)
 
-    preDelay.connect(reverbL.input)
-    preDelay.connect(reverbR.input)
+    const sideReverb = createReverbBranch(decayS, 0.005, 1) // TODO: 0.005 is now wrong // TODO: naming
+
+    midPreDelay.connect(reverbL.input)
+    midPreDelay.connect(reverbR.input)
+    sidePreDelay.connect(sideReverb.input)
 
     reverbL.output.connect(node)
     reverbR.output.connect(node)
+    sideReverb.output.connect(node)
   }
 
   connectStereoReverbBus(0.02, 2, reverbReturn)
