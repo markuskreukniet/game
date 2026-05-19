@@ -87,36 +87,8 @@ export function createAudio() {
     return {mid, side}
   }
 
-  function createReverbBranch(decayS, stereoDelayOffset, pan) {
-    // The early reflections range is 10–50 ms (inclusive), and the late reflections range is 50–120 ms (inclusive).
-    // At the moment, the reverb uses 5 delay times for early reflections, and 5 delay times for late reflections.
-    // For 5 delay times we prefer a maximum range with 3 low, 1 mid, and 1 high.
-    // However, when a delay starts at 10 ms or 119 ms, there is almost no room to add or subtract an offset.
-    // Subtracting 1 ms from 10 ms or adding 2 ms to 119 ms pushes the value outside the valid range.
-    // We should avoid equal intervals between reflections to reduce resonances and ringing artifacts.
-    // The early reflections should include a 0 ms delay (not in the array)
-    // so they begin immediately after the pre-delay.
-    // Delay times can be constructed as a sequence of cumulative sums,
-    // where each value is obtained by adding increasing increments
-    // (e.g. start at a base value, then add +11, +12, +13, ...).
-
-    // For early reflections, start the second delay at 10 ms,
-    // then build the following delays using cumulative sums with increments starting at +12.
-    // This gives 10 ms, 22 ms, 35 ms, and 49 ms, which leaves little room for adding or subtracting an offset.
-    // Therefore, use increments starting at +11 instead, resulting in 10 ms, 21 ms, 33 ms, and 46 ms.
-    // Reordering the increments to 10 + 11 + 13 + 12 makes the spacing less regular (10 ms, 21 ms, 34 ms, and 46 ms).
-    // Adding 2 ms to each value then improves the spacing, resulting in 12 ms, 23 ms, 36 ms, and 48 ms.
-
-    // For late reflections, start the first delay at 50 ms,
-    // then build the following delays using cumulative sums with increments starting at +16.
-    // This gives 50 ms, 66 ms, 83 ms, 101 ms, and 120 ms, which leaves little room for adding or subtracting an offset.
-    // Therefore, use increments starting at +15 instead, resulting in 50 ms, 65 ms, 81 ms, 98 ms, and 116 ms.
-    // Reordering the increments to 15 + 16 + 17 + 19 + 18 makes the spacing less regular
-    // (50 ms, 65 ms, 81 ms, 99 ms, and 116 ms).
-    // Adding 2 ms to each value then improves the spacing, resulting in 52 ms, 67 ms, 83 ms, 101 ms, and 118 ms.
-    const earlyReflectionDelayTimes = [0.012, 0.023, 0.036, 0.048].map(s => s + stereoDelayOffset)
-    const lateReflectionDelayTimes = [0.052, 0.067, 0.083, 0.101, 0.118].map(s => s + stereoDelayOffset)
-
+  // TODO: naming createReverbBranch, earlyReflectionDelayTimes, and lateReflectionDelayTimes
+  function createReverbBranch(decayS, earlyReflectionDelayTimes, lateReflectionDelayTimes, pan) {
     const input = context.createGain()
     const output = context.createGain()
     const combSum = context.createGain()
@@ -129,7 +101,7 @@ export function createAudio() {
     // Use ~6–10 ms for diffusion. Avoid matching early/late reflection delays to prevent ringing.
     // Shorter = smoother; too short reduces effectiveness.
     // Gain ~0.6–0.7 gives good diffusion; 0.65 is a safe midpoint.
-    const diffuser = createDiffuser(0.007, 0.65)
+    const diffuser = createDiffuser(0.01, 0.65)
     input.connect(diffuser.input)
 
     function addEarlyReflectionTap(delayS, gain) {
@@ -188,32 +160,71 @@ export function createAudio() {
     return inputNode
   }
 
-  // TODO: test mid only and side only < it works + check changes
   function connectStereoReverbBus(preDelayS, decayS, node) {
-    const midPreDelay = context.createDelay() // TODO: naming
-    midPreDelay.delayTime.value = preDelayS
+    // The early reflections range is 10–50 ms (inclusive), and the late reflections range is 50–120 ms (inclusive).
+    // At the moment, the reverb uses 5 delay times for early reflections, and 5 delay times for late reflections.
+    // For 5 delay times we prefer a maximum range with 3 low, 1 mid, and 1 high.
+    // However, when a delay starts at 10 ms or 119 ms, there is almost no room to add or subtract an offset.
+    // Subtracting 1 ms from 10 ms or adding 2 ms to 119 ms pushes the value outside the valid range.
+    // We should avoid equal intervals between reflections to reduce resonances and ringing artifacts.
+    // The early reflections should include a 0 ms delay (not in the array)
+    // so they begin immediately after the pre-delay.
+    // Delay times can be constructed as a sequence of cumulative sums,
+    // where each value is obtained by adding increasing increments
+    // (e.g. start at a base value, then add +11, +12, +13, ...).
 
-    const sidePreDelay = context.createDelay() // TODO: naming
-    sidePreDelay.delayTime.value = preDelayS
+    // Prime-number delay times can avoid repeating intervals and reduce ringing.
+    // The diffuser delay (6–10 ms) should also avoid matching these intervals.
 
-    const midSide = createMidSideSplit(reverbSend) // TODO: naming
-    midSide.mid.connect(midPreDelay)
-    midSide.side.connect(sidePreDelay)
+    // For early reflections, start at 10 ms,
+    // then build the following delays using cumulative sums with increments starting at +9.
+    // This gives 10 ms, 19 ms, 29 ms, and 40 ms, which is not ideal because 10 ms divides 40 ms.
+    // Therefore, it becomes 11 ms, 20 ms, 30 ms, and 41 ms for the left side delays.
+    // Reordering the increments to 11 + 9 + 11 + 10 makes the spacing less regular (11 ms, 20 ms, 31 ms, and 41 ms).
+
+    // Add 4 ms to each left delay to construct the right side delays, resulting in 15 ms, 24 ms, 35 ms, and 45 ms.
+    // These right side delays are not ideal because 15 ms divides 45 ms.
+    // Therefore, add 1 ms to all left and right delays.
+    // The left delays become 12 ms, 21 ms, 32 ms, and 42 ms, and the right become 16 ms, 25 ms, 36 ms, and 46 ms.
+    // The mid delays are constructed by choosing a delay after each right delay and before the next left delay,
+    // and spacing them as far apart as possible, resulting in 18 ms, 28 ms, 39 ms, and 49 ms.
+
+    // The late reflections are constructed from prime numbers.
+
+    // relevant prime numbers:
+    // 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113
+
+    const leftEarlyReflectionDelays = [0.012, 0.021, 0.032, 0.042]
+    const rightEarlyReflectionDelays = [0.016, 0.025, 0.036, 0.046]
+    const sideEarlyReflectionDelays = [0.018, 0.028, 0.039, 0.049]
+
+    const leftLateReflectionDelays = [0.053, 0.067, 0.079, 0.097, 0.109]
+    const rightLateReflectionDelays = [0.059, 0.071, 0.083, 0.101, 0.113]
+    const sideLateReflectionDelays = [0.061, 0.073, 0.089, 0.103, 0.107]
+
+    const midPreDelayNode = context.createDelay()
+    midPreDelayNode.delayTime.value = preDelayS
+
+    const sidePreDelayNode = context.createDelay() // TODO: does it makes sense to have two context.createDelay?
+    sidePreDelayNode.delayTime.value = preDelayS
+
+    const midSideChannels = createMidSideSplit(reverbSend)
+    midSideChannels.mid.connect(midPreDelayNode)
+    midSideChannels.side.connect(sidePreDelayNode)
 
     // 4 ms difference (2 * 0.002) is a good balance. 6 ms sounds more like a stereo effect than natural spaciousness.
     // Panning between 0.3 and 0.5 sounds natural without sounding too wide.
-    const reverbL = createReverbBranch(decayS, -0.002, -0.5)
-    const reverbR = createReverbBranch(decayS, 0.002, 0.5)
+    const leftReverbBranch = createReverbBranch(decayS, leftEarlyReflectionDelays, leftLateReflectionDelays, -0.5)
+    const rightReverbBranch = createReverbBranch(decayS, rightEarlyReflectionDelays, rightLateReflectionDelays, 0.5)
+    const sideReverbBranch = createReverbBranch(decayS, sideEarlyReflectionDelays, sideLateReflectionDelays, 0)
 
-    const sideReverb = createReverbBranch(decayS, 0.005, 1) // TODO: 0.005 is now wrong // TODO: naming
+    midPreDelayNode.connect(leftReverbBranch.input)
+    midPreDelayNode.connect(rightReverbBranch.input)
+    sidePreDelayNode.connect(sideReverbBranch.input)
 
-    midPreDelay.connect(reverbL.input)
-    midPreDelay.connect(reverbR.input)
-    sidePreDelay.connect(sideReverb.input)
-
-    reverbL.output.connect(node)
-    reverbR.output.connect(node)
-    sideReverb.output.connect(node)
+    leftReverbBranch.output.connect(node)
+    rightReverbBranch.output.connect(node)
+    sideReverbBranch.output.connect(node)
   }
 
   connectStereoReverbBus(0.02, 2, reverbReturn)
