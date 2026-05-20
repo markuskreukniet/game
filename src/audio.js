@@ -1,9 +1,13 @@
 export function createAudio() {
   const GAIN_EPSILON = 0.0001
 
-  // TODO: reverb limitations:
-  // 1. Identical feedback for all comb filters
-  // 2. short reverbs could use 3 internal delays instead of always 5
+  const BPM = 120
+  const QUARTER_NOTE_DURATION = 60 / BPM
+  const WHOLE_NOTE_DURATION = QUARTER_NOTE_DURATION * 4
+  const HALF_NOTE_DURATION = QUARTER_NOTE_DURATION * 2
+  const EIGHTH_NOTE_DURATION = QUARTER_NOTE_DURATION * 0.5
+  const SIXTEENTH_NOTE_DURATION = QUARTER_NOTE_DURATION * 0.25
+  const THIRTY_SECOND_NOTE_DURATION = QUARTER_NOTE_DURATION * 0.125
 
   // TODO: this should only happen after user input, now it also happens before < results in warning
   const context = new AudioContext()
@@ -160,6 +164,7 @@ export function createAudio() {
     return inputNode
   }
 
+  // TODO: Reverb limitations: short reverbs could use, for example, 3 internal delays instead of always 5
   function connectStereoReverbBus(preDelayS, decayS, node) {
     // The early reflections range is 10–50 ms (inclusive), and the late reflections range is 50–120 ms (inclusive).
     // At the moment, the reverb uses 5 delay times for early reflections, and 5 delay times for late reflections.
