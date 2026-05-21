@@ -288,7 +288,7 @@ function createPhysicsSystem(audio) {
   // TODO: these consts to a config
   const jumpVelocity = -450
   const gravity = 800
-  const coyoteTime = 0.08 // s
+  const coyoteTime = 0.08 // s // TODO: should be 30 ms?
   const jumpBufferTime = 0.1 // s
   const maxFallSpeed = 700
   const fallGravityScale = 1.6

@@ -1,13 +1,38 @@
+// TODO: createNoteFrequencies is good naming. inner check with namings + pitches of these notes <<< it works
+function createNoteFrequencies() {
+  const noteNames = ['C', 'Cs', 'D', 'Ds', 'E', 'F', 'Fs', 'G', 'Gs', 'A', 'As', 'B']
+  const notes = {}
+
+  for (let octave = 0; octave <= 10; octave++) {
+    for (let semitone = 0; semitone < noteNames.length; semitone++) {
+      const midiNote = octave * 12 + semitone + 12
+      const frequency = 440 * 2 ** ((midiNote - 69) / 12)
+      const noteName = `${noteNames[semitone]}${octave}`
+
+      notes[noteName] = Math.round(frequency * 100) / 100
+    }
+  }
+
+  return notes
+}
+
 export function createAudio() {
   const GAIN_EPSILON = 0.0001
 
   const BPM = 120
-  const QUARTER_NOTE_DURATION = 60 / BPM
-  const WHOLE_NOTE_DURATION = QUARTER_NOTE_DURATION * 4
-  const HALF_NOTE_DURATION = QUARTER_NOTE_DURATION * 2
-  const EIGHTH_NOTE_DURATION = QUARTER_NOTE_DURATION * 0.5
-  const SIXTEENTH_NOTE_DURATION = QUARTER_NOTE_DURATION * 0.25
-  const THIRTY_SECOND_NOTE_DURATION = QUARTER_NOTE_DURATION * 0.125
+  const BEAT = 60 / BPM // QUARTER_NOTE
+  const WHOLE_NOTE = BEAT * 4
+  const HALF_NOTE = BEAT * 2
+  const EIGHTH_NOTE = BEAT / 2
+  const SIXTEENTH_NOTE = BEAT / 4
+  const THIRTY_SECOND_NOTE = BEAT / 8
+  const SIXTY_FOURTH_NOTE = BEAT / 16
+  const NOTE_128 = BEAT / 32
+  const NOTE_256 = BEAT / 64
+  const HALF_NOTE_PLAY_DURATION = HALF_NOTE - NOTE_256
+  const SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_256
+
+  const NOTE_FREQUENCIES = createNoteFrequencies()
 
   // TODO: this should only happen after user input, now it also happens before < results in warning
   const context = new AudioContext()
@@ -351,17 +376,17 @@ export function createAudio() {
     const now = context.currentTime
     let offset = 0
 
-    for (const frequency of [523.25, 659.25, 783.99, 1046.5]) /* noteFrequencies */ {
+    for (const frequency of [NOTE_FREQUENCIES.C5, NOTE_FREQUENCIES.E5, NOTE_FREQUENCIES.G5, NOTE_FREQUENCIES.C6]) {
       playTone({
         frequency,
-        sustain: 0.09,
+        sustain: SIXTEENTH_NOTE_PLAY_DURATION,
         type: 'square',
         volume: 0.6,
         startAt: now + offset,
         attack: 0.01,
         release: 0.05
       })
-      offset += 0.09
+      offset += SIXTEENTH_NOTE + NOTE_256
     }
   }
 
