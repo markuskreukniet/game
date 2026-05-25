@@ -29,10 +29,19 @@ export function createAudio() {
   const SIXTY_FOURTH_NOTE = BEAT / 16
   const NOTE_128 = BEAT / 32
   const NOTE_256 = BEAT / 64
+  const WHOLE_NOTE_PLAY_DURATION = WHOLE_NOTE - NOTE_256
   const HALF_NOTE_PLAY_DURATION = HALF_NOTE - NOTE_256
   const SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_256
 
   const NOTE_FREQUENCIES = createNoteFrequencies()
+
+  // TODO: naming in combination with noteNames inside createNoteFrequencies
+  const CHORD_PROGRESSION = [
+    ['E3', 'G3', 'B3'],
+    ['C3', 'E3', 'G3'],
+    ['G3', 'B3', 'D4'],
+    ['D3', 'Fs3', 'A3']
+  ]
 
   // TODO: this should only happen after user input, now it also happens before < results in warning
   const context = new AudioContext()
@@ -263,6 +272,41 @@ export function createAudio() {
     if (context.state === 'suspended') context.resume()
   }
 
+  // TODO: check + namings
+  function playChord(noteNames, startAt, attack, sustain) {
+    const volume = 0.3 / noteNames.length
+
+    for (const noteName of noteNames) {
+      playTone({
+        frequency: NOTE_FREQUENCIES[noteName],
+        sustain,
+        type: 'sawtooth',
+        volume,
+        startAt,
+        attack,
+        release: 0.08,
+        cutoffHz: 1800,
+        filterStageCount: 2,
+        numberOfVoices: 3
+      })
+    }
+  }
+
+  // TODO: check + namings
+  function playProgression() {
+    ensureRunning()
+
+    const attack = 0.02
+    const sustain = WHOLE_NOTE_PLAY_DURATION - attack
+    const now = context.currentTime
+    let offset = 0
+
+    for (const chord of CHORD_PROGRESSION) {
+      playChord(chord, now + offset, attack, sustain)
+      offset += WHOLE_NOTE
+    }
+  }
+
   // TODO: // sub-bass, bass, midrange
 
   // TODO: do not use destructuring, also not on other places in this file
@@ -373,19 +417,13 @@ export function createAudio() {
   function goal() {
     ensureRunning()
 
+    const attack = 0.01
+    const sustain = SIXTEENTH_NOTE_PLAY_DURATION - attack
     const now = context.currentTime
     let offset = 0
 
     for (const frequency of [NOTE_FREQUENCIES.C5, NOTE_FREQUENCIES.E5, NOTE_FREQUENCIES.G5, NOTE_FREQUENCIES.C6]) {
-      playTone({
-        frequency,
-        sustain: SIXTEENTH_NOTE_PLAY_DURATION,
-        type: 'square',
-        volume: 0.6,
-        startAt: now + offset,
-        attack: 0.01,
-        release: 0.05
-      })
+      playTone({frequency, sustain, type: 'square', volume: 0.6, startAt: now + offset, attack, release: 0.05})
       offset += SIXTEENTH_NOTE + NOTE_256
     }
   }
