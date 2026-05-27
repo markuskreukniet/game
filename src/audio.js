@@ -31,7 +31,10 @@ export function createAudio() {
   const NOTE_256 = BEAT / 64
   const WHOLE_NOTE_PLAY_DURATION = WHOLE_NOTE - NOTE_256
   const HALF_NOTE_PLAY_DURATION = HALF_NOTE - NOTE_256
+  const EIGHTH_NOTE_PLAY_DURATION = EIGHTH_NOTE - NOTE_256
   const SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_256
+
+  const TRANSIENT = 0.01 // TODO: naming
 
   const NOTE_FREQUENCIES = createNoteFrequencies()
 
@@ -412,6 +415,46 @@ export function createAudio() {
       volume: 0.15,
       startAt: context.currentTime
     })
+  }
+
+  function playQuarterNoteBassDrums(hitCount) {
+    let startAt = context.currentTime
+    const sustain = (EIGHTH_NOTE_PLAY_DURATION / 8) * 7 - TRANSIENT // TODO: - TRANSIENT is not needed? it only makes it more complex and slower?
+
+    for (let i = 0; i < hitCount; i++) {
+      bassDrum(startAt, startAt + EIGHTH_NOTE_PLAY_DURATION, startAt + sustain)
+      startAt += BEAT
+    }
+  }
+
+  function bassDrum(startAt, endAt, releaseAt) {
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+
+    oscillator.connect(gain)
+    gain.connect(masterGain)
+
+    oscillator.type = 'sine'
+
+    const transientEndAt = startAt + TRANSIENT
+
+    oscillator.frequency.setValueAtTime(NOTE_FREQUENCIES.Ds10, startAt)
+    oscillator.frequency.linearRampToValueAtTime(NOTE_FREQUENCIES.B3, transientEndAt)
+    oscillator.frequency.exponentialRampToValueAtTime(35, endAt) // TODO: is it 35?
+
+    gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
+    gain.gain.linearRampToValueAtTime(1, transientEndAt)
+    gain.gain.setValueAtTime(0.9, releaseAt)
+    gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, endAt)
+
+    oscillator.start(startAt)
+    oscillator.stop(endAt)
+
+    // TODO: use it also on other places?
+    oscillator.onended = () => {
+      oscillator.disconnect()
+      gain.disconnect()
+    }
   }
 
   function goal() {
