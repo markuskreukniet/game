@@ -17,6 +17,9 @@ function createNoteFrequencies() {
 }
 
 export function createAudio() {
+  // TODO: this should only happen after user input, now it also happens before < results in warning
+  const context = new AudioContext()
+
   const GAIN_EPSILON = 0.0001
 
   const BPM = 120
@@ -34,9 +37,9 @@ export function createAudio() {
   const EIGHTH_NOTE_PLAY_DURATION = EIGHTH_NOTE - NOTE_256
   const SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_256
 
-  const TRANSIENT = 0.01 // TODO: naming
-
   const NOTE_FREQUENCIES = createNoteFrequencies()
+
+  const WHITE_NOISE_BUFFER = createWhiteNoiseBuffer()
 
   // TODO: naming in combination with noteNames inside createNoteFrequencies
   const CHORD_PROGRESSION = [
@@ -46,8 +49,6 @@ export function createAudio() {
     ['D3', 'Fs3', 'A3']
   ]
 
-  // TODO: this should only happen after user input, now it also happens before < results in warning
-  const context = new AudioContext()
   const masterGain = context.createGain()
   masterGain.gain.value = 0.2
   masterGain.connect(context.destination)
@@ -57,6 +58,18 @@ export function createAudio() {
 
   reverbReturn.gain.value = 0.6
   reverbReturn.connect(masterGain)
+
+  function createWhiteNoiseBuffer() {
+    const sampleRate = context.sampleRate
+    const buffer = context.createBuffer(1, sampleRate, sampleRate)
+    const data = buffer.getChannelData(0)
+
+    for (let i = 0; i < sampleRate; i++) {
+      data[i] = Math.random() * 2 - 1
+    }
+
+    return buffer
+  }
 
   function createDiffuser(delayS, gain) {
     const input = context.createGain()
@@ -419,15 +432,15 @@ export function createAudio() {
 
   function playQuarterNoteBassDrums(hitCount) {
     let startAt = context.currentTime
-    const sustain = (EIGHTH_NOTE_PLAY_DURATION / 8) * 7 - TRANSIENT // TODO: - TRANSIENT is not needed? it only makes it more complex and slower?
+    const sustain = (EIGHTH_NOTE_PLAY_DURATION / 8) * 7
 
     for (let i = 0; i < hitCount; i++) {
-      bassDrum(startAt, startAt + EIGHTH_NOTE_PLAY_DURATION, startAt + sustain)
+      playBassDrum(startAt, startAt + EIGHTH_NOTE_PLAY_DURATION, startAt + sustain)
       startAt += BEAT
     }
   }
 
-  function bassDrum(startAt, endAt, releaseAt) {
+  function playBassDrum(startAt, endAt, releaseAt) {
     const oscillator = context.createOscillator()
     const gain = context.createGain()
 
@@ -436,14 +449,15 @@ export function createAudio() {
 
     oscillator.type = 'sine'
 
-    const transientEndAt = startAt + TRANSIENT
+    const transientEndAt = startAt + 0.006
 
     oscillator.frequency.setValueAtTime(NOTE_FREQUENCIES.Ds10, startAt)
     oscillator.frequency.linearRampToValueAtTime(NOTE_FREQUENCIES.B3, transientEndAt)
     oscillator.frequency.exponentialRampToValueAtTime(35, endAt) // TODO: is it 35?
 
     gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
-    gain.gain.linearRampToValueAtTime(1, transientEndAt)
+    gain.gain.linearRampToValueAtTime(1, startAt + 0.003)
+    gain.gain.linearRampToValueAtTime(0.9, transientEndAt)
     gain.gain.setValueAtTime(0.9, releaseAt)
     gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, endAt)
 
@@ -453,6 +467,53 @@ export function createAudio() {
     // TODO: use it also on other places?
     oscillator.onended = () => {
       oscillator.disconnect()
+      gain.disconnect()
+    }
+  }
+
+  // TODO: only check if EIGHTH_NOTE and EIGHTH_NOTE_PLAY_DURATION is correct
+  function playOffbeatHiHats(hitCount) {
+    let startAt = context.currentTime + EIGHTH_NOTE
+    const sustain = (EIGHTH_NOTE_PLAY_DURATION / 8) * 7 // TODO: duplicate
+
+    for (let i = 0; i < hitCount; i++) {
+      playHiHat(startAt, startAt + EIGHTH_NOTE_PLAY_DURATION, startAt + sustain)
+      startAt += BEAT
+    }
+  }
+
+  function playHiHat(startAt, endAt, releaseAt) {
+    const bufferSource = context.createBufferSource()
+    bufferSource.buffer = WHITE_NOISE_BUFFER
+
+    const highpass = context.createBiquadFilter() // TODO: duplicate
+    highpass.type = 'highpass'
+    highpass.frequency.value = 6000
+
+    const bandpass = context.createBiquadFilter()
+    bandpass.type = 'bandpass'
+    bandpass.frequency.value = 10000
+    bandpass.Q.value = 1
+
+    const gain = context.createGain()
+    gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
+    gain.gain.linearRampToValueAtTime(1, startAt + 0.003) // TODO: duplicate
+    gain.gain.linearRampToValueAtTime(0.9, startAt + 0.006) // TODO: duplicate
+    gain.gain.setValueAtTime(0.9, releaseAt) // TODO: duplicate
+    gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, endAt)
+
+    bufferSource.connect(highpass)
+    highpass.connect(bandpass)
+    bandpass.connect(gain)
+    gain.connect(masterGain)
+
+    bufferSource.start(startAt)
+    bufferSource.stop(endAt)
+
+    bufferSource.onended = () => {
+      bufferSource.disconnect()
+      highpass.disconnect()
+      bandpass.disconnect()
       gain.disconnect()
     }
   }
