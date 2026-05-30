@@ -1,19 +1,17 @@
-// TODO: createNoteFrequencies is good naming. inner check with namings + pitches of these notes <<< it works
 function createNoteFrequencies() {
   const noteNames = ['C', 'Cs', 'D', 'Ds', 'E', 'F', 'Fs', 'G', 'Gs', 'A', 'As', 'B']
-  const notes = {}
+  const noteFrequencies = {}
 
   for (let octave = 0; octave <= 10; octave++) {
     for (let semitone = 0; semitone < noteNames.length; semitone++) {
       const midiNote = octave * 12 + semitone + 12
       const frequency = 440 * 2 ** ((midiNote - 69) / 12)
-      const noteName = `${noteNames[semitone]}${octave}`
 
-      notes[noteName] = Math.round(frequency * 100) / 100
+      noteFrequencies[`${noteNames[semitone]}${octave}`] = Math.round(frequency * 100) / 100
     }
   }
 
-  return notes
+  return noteFrequencies
 }
 
 export function createAudio() {
@@ -36,6 +34,7 @@ export function createAudio() {
   const HALF_NOTE_PLAY_DURATION = HALF_NOTE - NOTE_256
   const EIGHTH_NOTE_PLAY_DURATION = EIGHTH_NOTE - NOTE_256
   const SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_256
+  const SWUNG_SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_128 - NOTE_256 // TODO: is - NOTE_128 correct?
 
   const NOTE_FREQUENCIES = createNoteFrequencies()
 
@@ -471,18 +470,63 @@ export function createAudio() {
     }
   }
 
-  // TODO: only check if EIGHTH_NOTE and EIGHTH_NOTE_PLAY_DURATION is correct
+  // TODO: only check if EIGHTH_NOTE and EIGHTH_NOTE_PLAY_DURATION is correct. TODO: it should be stereo with haas?
   function playOffbeatHiHats(hitCount) {
     let startAt = context.currentTime + EIGHTH_NOTE
-    const sustain = (EIGHTH_NOTE_PLAY_DURATION / 8) * 7 // TODO: duplicate
+    const sustain = (EIGHTH_NOTE_PLAY_DURATION / 8) * 7 // TODO: duplicate. TODO is correct?
 
     for (let i = 0; i < hitCount; i++) {
-      playHiHat(startAt, startAt + EIGHTH_NOTE_PLAY_DURATION, startAt + sustain)
+      playHiHat(startAt, startAt + EIGHTH_NOTE_PLAY_DURATION, startAt + sustain, 11000, 0.6, 0.598, 0.134, 1, 0.9, 0)
       startAt += BEAT
     }
   }
 
-  function playHiHat(startAt, endAt, releaseAt) {
+  function playSyncopatedHiHats(hitCount) {
+    let startAt = context.currentTime
+    const sustain = (SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7 // TODO: duplicate <<< hats is eigenlijk * 6, kick iets meer
+    const diff = (SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7 - (SWUNG_SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7 // TODO: naming
+
+    // TODO: is it efficient?
+    for (let i = 0; i < hitCount; i++) {
+      if (i % 4 !== 2 || i < 2) {
+        let pan = -0.4 // TODO: is 0.4 correct?
+        let swungStartAt = startAt
+        let swungReleaseAt = startAt + sustain
+        if (i % 2 === 0) {
+          pan = Math.abs(pan)
+          swungStartAt += NOTE_128
+          swungReleaseAt -= diff
+        }
+
+        playHiHat(
+          swungStartAt,
+          startAt + SIXTEENTH_NOTE_PLAY_DURATION,
+          swungReleaseAt,
+          9000,
+          0.4,
+          0.7,
+          0.1,
+          0.9,
+          0.8,
+          pan
+        )
+      }
+      startAt += SIXTEENTH_NOTE
+    }
+  }
+
+  function playHiHat(
+    startAt,
+    endAt,
+    releaseAt,
+    bandpassFrequency,
+    bandpassQ,
+    whiteNoiseGainValue,
+    oscillatorsGainValue,
+    transientGain,
+    sustainGain,
+    pan
+  ) {
     const bufferSource = context.createBufferSource()
     bufferSource.buffer = WHITE_NOISE_BUFFER
 
@@ -492,20 +536,44 @@ export function createAudio() {
 
     const bandpass = context.createBiquadFilter()
     bandpass.type = 'bandpass'
-    bandpass.frequency.value = 10000
-    bandpass.Q.value = 1
+    bandpass.frequency.value = bandpassFrequency
+    bandpass.Q.value = bandpassQ
+
+    const panner = context.createStereoPanner()
+    panner.pan.value = pan
+
+    const whiteNoiseGain = context.createGain()
+    whiteNoiseGain.gain.value = whiteNoiseGainValue
 
     const gain = context.createGain()
     gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
-    gain.gain.linearRampToValueAtTime(1, startAt + 0.003) // TODO: duplicate
-    gain.gain.linearRampToValueAtTime(0.9, startAt + 0.006) // TODO: duplicate
-    gain.gain.setValueAtTime(0.9, releaseAt) // TODO: duplicate
+    gain.gain.linearRampToValueAtTime(transientGain, startAt + 0.003) // TODO: duplicate
+    gain.gain.linearRampToValueAtTime(sustainGain, startAt + 0.006) // TODO: duplicate
+    gain.gain.setValueAtTime(sustainGain, releaseAt) // TODO: duplicate
     gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, endAt)
 
-    bufferSource.connect(highpass)
+    const oscillatorsGain = context.createGain()
+    oscillatorsGain.gain.value = oscillatorsGainValue
+
+    for (const frequency of [6007, 8009, 10007]) /* prime numbers */ {
+      const oscillator = context.createOscillator()
+
+      oscillator.type = 'square'
+      oscillator.frequency.value = frequency
+      oscillator.connect(oscillatorsGain)
+      oscillator.start(startAt)
+      oscillator.stop(endAt)
+
+      oscillator.onended = () => oscillator.disconnect()
+    }
+
+    bufferSource.connect(whiteNoiseGain)
+    whiteNoiseGain.connect(highpass)
+    oscillatorsGain.connect(highpass)
     highpass.connect(bandpass)
     bandpass.connect(gain)
-    gain.connect(masterGain)
+    gain.connect(panner)
+    panner.connect(masterGain)
 
     bufferSource.start(startAt)
     bufferSource.stop(endAt)
@@ -515,6 +583,7 @@ export function createAudio() {
       highpass.disconnect()
       bandpass.disconnect()
       gain.disconnect()
+      panner.disconnect()
     }
   }
 
