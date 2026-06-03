@@ -1,15 +1,17 @@
-// TODO: naming of this file
-
 const GAIN_EPSILON = 0.0001
+const MIN_FREQUENCY = 35
 
-export function audioThings(bpm) {
+export async function audioThings(bpm) {
   const noteTimings = createNoteTimings(bpm)
+
+  const [bassDrum] = await Promise.all([createBassDrumBuffer(noteTimings.eightNotePlayDuration)])
 
   return {
     noteTimings,
     noteFrequencies: createNoteFrequencies(),
     gainEpsilon: GAIN_EPSILON,
-    percussionBuffers: {bassDrum: createBassDrumBuffer(noteTimings.eightNotePlayDuration)}
+    minFrequency: MIN_FREQUENCY,
+    percussionBuffers: {bassDrum}
   }
 }
 
@@ -67,15 +69,16 @@ function createNoteFrequencies() {
   return noteFrequencies
 }
 
+function roundToOneDecimal(value) {
+  return Math.round(value * 10) / 10 // Prevent floating-point artifacts
+}
+
 function calculatePercussionSustain(noteTiming) {
   return (noteTiming / 8) * 7
 }
 
-// WIP
 function createBassDrumBuffer(duration, transientFrequency, bassFrequency, maxGain) {
   const offlineContext = new OfflineAudioContext(1, duration * context.sampleRate, context.sampleRate)
-
-  const sustainGain = Math.round((maxGain - 0.1) * 10) / 10 // floating-point precision // TODO comment
 
   const oscillator = offlineContext.createOscillator()
   const gain = offlineContext.createGain()
@@ -83,27 +86,24 @@ function createBassDrumBuffer(duration, transientFrequency, bassFrequency, maxGa
   oscillator.connect(gain)
   gain.connect(offlineContext.destination)
 
-  oscillator.type = 'sine'
-
   const startAt = 0
-  const endAt = duration
-
   const transientEndAt = startAt + 0.006
-  const sustain = calculatePercussionSustain(duration)
-  const releaseAt = startAt + sustain
+  const sustainGain = roundToOneDecimal(maxGain - 0.1)
+
+  oscillator.type = 'sine'
 
   oscillator.frequency.setValueAtTime(transientFrequency, startAt)
   oscillator.frequency.linearRampToValueAtTime(bassFrequency, transientEndAt)
-  oscillator.frequency.exponentialRampToValueAtTime(35, endAt)
+  oscillator.frequency.exponentialRampToValueAtTime(MIN_FREQUENCY, duration)
 
   gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
-  gain.gain.linearRampToValueAtTime(1, startAt + 0.003)
-  gain.gain.linearRampToValueAtTime(0.9, transientEndAt)
-  gain.gain.setValueAtTime(0.9, releaseAt)
-  gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, endAt)
+  gain.gain.linearRampToValueAtTime(maxGain, startAt + 0.003)
+  gain.gain.linearRampToValueAtTime(sustainGain, transientEndAt)
+  gain.gain.setValueAtTime(sustainGain, startAt + calculatePercussionSustain(duration))
+  gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, duration)
 
   oscillator.start(startAt)
-  oscillator.stop(endAt)
+  oscillator.stop(duration)
 
-  return offlineContext.startRendering() // TODO: returns promise
+  return offlineContext.startRendering()
 }
