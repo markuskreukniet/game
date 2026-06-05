@@ -1,18 +1,45 @@
 const GAIN_EPSILON = 0.0001
 const MIN_FREQUENCY = 35
 
-export async function audioThings(bpm) {
+export async function audioThings(context, bpm) {
   const noteTimings = createNoteTimings(bpm)
+  const whiteNoiseBuffer = createWhiteNoiseBuffer(context)
 
-  const [bassDrum] = await Promise.all([createBassDrumBuffer(noteTimings.eightNotePlayDuration)])
+  const hiHatOscillatorFrequencies = [6007, 8009, 10007] /* prime numbers */
+
+  const [bassDrum, openHiHat, closedHiHat, swungClosedHiHat] = await Promise.all([
+    createBassDrumBuffer(context, 0, noteTimings.eightNotePlayDuration),
+    createHiHatBuffer(context, whiteNoiseBuffer, hiHatOscillatorFrequencies, 0, noteTimings.eightNotePlayDuration),
+    createHiHatBuffer(context, whiteNoiseBuffer, hiHatOscillatorFrequencies, 0, noteTimings.sixteenthNotePlayDuration),
+    createHiHatBuffer(
+      context,
+      whiteNoiseBuffer,
+      hiHatOscillatorFrequencies,
+      noteTimings.swingAmount,
+      noteTimings.swungSixteenthNotePlayDuration
+    )
+  ])
 
   return {
     noteTimings,
     noteFrequencies: createNoteFrequencies(),
     gainEpsilon: GAIN_EPSILON,
     minFrequency: MIN_FREQUENCY,
-    percussionBuffers: {bassDrum}
+    whiteNoiseBuffer,
+    percussionBuffers: {bassDrum, openHiHat, closedHiHat, swungClosedHiHat}
   }
+}
+
+function createWhiteNoiseBuffer(context) {
+  const sampleRate = context.sampleRate
+  const buffer = context.createBuffer(1, sampleRate, sampleRate)
+  const data = buffer.getChannelData(0)
+
+  for (let i = 0; i < sampleRate; i++) {
+    data[i] = Math.random() * 2 - 1
+  }
+
+  return buffer
 }
 
 function createNoteTimings(bpm) {
@@ -25,6 +52,7 @@ function createNoteTimings(bpm) {
   const sixtyFourthNote = beat / 16
   const note128th = beat / 32
   const note256th = beat / 64
+  const swingAmount = note256th
   const sixteenthNotePlayDuration = calculatePlayDuration(sixteenthNote)
 
   function calculatePlayDuration(noteTiming) {
@@ -32,7 +60,7 @@ function createNoteTimings(bpm) {
   }
 
   function calculateSwung(noteTiming) {
-    return noteTiming - note256th
+    return noteTiming - swingAmount
   }
 
   return {
@@ -49,6 +77,7 @@ function createNoteTimings(bpm) {
     halfNotePlayDuration: calculatePlayDuration(halfNote),
     eightNotePlayDuration: calculatePlayDuration(eighthNote),
     sixteenthNotePlayDuration,
+    swingAmount,
     swungSixteenthNotePlayDuration: calculateSwung(sixteenthNotePlayDuration)
   }
 }
@@ -73,12 +102,20 @@ function roundToOneDecimal(value) {
   return Math.round(value * 10) / 10 // Prevent floating-point artifacts
 }
 
+function calculateSustainGain(value) {
+  return roundToOneDecimal(value - 0.1)
+}
+
 function calculatePercussionSustain(noteTiming) {
   return (noteTiming / 8) * 7
 }
 
-function createBassDrumBuffer(duration, transientFrequency, bassFrequency, maxGain) {
-  const offlineContext = new OfflineAudioContext(1, duration * context.sampleRate, context.sampleRate)
+function createOfflineAudioContext(context, startAt, duration) {
+  return new OfflineAudioContext(1, (startAt + duration) * context.sampleRate, context.sampleRate)
+}
+
+function createBassDrumBuffer(context, startAt, duration, transientFrequency, bassFrequency, maxGain) {
+  const offlineContext = createOfflineAudioContext(context, startAt, duration)
 
   const oscillator = offlineContext.createOscillator()
   const gain = offlineContext.createGain()
@@ -86,9 +123,8 @@ function createBassDrumBuffer(duration, transientFrequency, bassFrequency, maxGa
   oscillator.connect(gain)
   gain.connect(offlineContext.destination)
 
-  const startAt = 0
-  const transientEndAt = startAt + 0.006
-  const sustainGain = roundToOneDecimal(maxGain - 0.1)
+  const transientEndAt = startAt + 0.005
+  const sustainGain = calculateSustainGain(maxGain)
 
   oscillator.type = 'sine'
 
@@ -105,5 +141,10 @@ function createBassDrumBuffer(duration, transientFrequency, bassFrequency, maxGa
   oscillator.start(startAt)
   oscillator.stop(duration)
 
+  return offlineContext.startRendering()
+}
+
+function createHiHatBuffer(context, whiteNoiseBuffer, oscillatorFrequencies, startAt, duration) {
+  const offlineContext = createOfflineAudioContext(context, startAt, duration)
   return offlineContext.startRendering()
 }
