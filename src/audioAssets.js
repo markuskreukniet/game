@@ -1,5 +1,6 @@
 const GAIN_EPSILON = 0.0001
 const MIN_FREQUENCY = 35
+const MIN_TREBLE_FREQUENCY = 6000
 
 export async function audioThings(context, bpm) {
   const noteTimings = createNoteTimings(bpm)
@@ -25,6 +26,7 @@ export async function audioThings(context, bpm) {
     noteFrequencies: createNoteFrequencies(),
     gainEpsilon: GAIN_EPSILON,
     minFrequency: MIN_FREQUENCY,
+    minTrebleFrequency: MIN_TREBLE_FREQUENCY,
     whiteNoiseBuffer,
     percussionBuffers: {bassDrum, openHiHat, closedHiHat, swungClosedHiHat}
   }
@@ -112,6 +114,10 @@ function calculatePercussionSustain(noteTiming) {
 
 function createOfflineAudioContext(context, startAt, duration) {
   return new OfflineAudioContext(1, (startAt + duration) * context.sampleRate, context.sampleRate)
+}
+
+function createTrebleFilter() {
+  return createHighPassFilter(MIN_TREBLE_FREQUENCY)
 }
 
 function createLowPassFilter(frequency) {
