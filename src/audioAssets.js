@@ -116,6 +116,16 @@ function createOfflineAudioContext(context, startAt, duration) {
   return new OfflineAudioContext(1, (startAt + duration) * context.sampleRate, context.sampleRate)
 }
 
+function connect48DbOctTrebleFilter(inputNode) {
+  for (let i = 0; i < 4; i++) {
+    const filter = createTrebleFilter()
+    inputNode.connect(filter)
+    inputNode = filter
+  }
+
+  return inputNode
+}
+
 function createTrebleFilter() {
   return createHighPassFilter(MIN_TREBLE_FREQUENCY)
 }
