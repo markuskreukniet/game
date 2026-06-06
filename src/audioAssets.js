@@ -114,6 +114,23 @@ function createOfflineAudioContext(context, startAt, duration) {
   return new OfflineAudioContext(1, (startAt + duration) * context.sampleRate, context.sampleRate)
 }
 
+function createLowPassFilter(frequency) {
+  return createLowOrHighPassFilter('lowpass', frequency)
+}
+
+function createHighPassFilter(frequency) {
+  return createLowOrHighPassFilter('highpass', frequency)
+}
+
+function createLowOrHighPassFilter(type, frequency) {
+  const filter = context.createBiquadFilter()
+  filter.type = type
+  filter.frequency.value = frequency
+  filter.Q.value = Math.SQRT1_2
+
+  return filter
+}
+
 function createBassDrumBuffer(context, startAt, duration, transientFrequency, bassFrequency, maxGain) {
   const offlineContext = createOfflineAudioContext(context, startAt, duration)
 
