@@ -2,6 +2,7 @@ const GAIN_EPSILON = 0.0001
 const MIN_FREQUENCY = 35
 const MAX_FREQUENCY = 20000
 const MIN_TREBLE_FREQUENCY = 6000
+const ONE_MS_IN_SECONDS = 0.001
 const TWO_MS_IN_SECONDS = 0.002
 
 export async function audioThings(context, bpm) {
@@ -16,30 +17,33 @@ export async function audioThings(context, bpm) {
   const closedHiHatBandpassFrequency = 11000
   const closedHiHatTransientGain = 0.9
   const closedHiHatSustainGain = calculateSustainGain(closedHiHatTransientGain)
-  const closedHiHatBandpassQ = roundToThreeDecimals(calculateBandpassQForMaxFrequency(closedHiHatBandpassFrequency))
+  const closedHiHatBandpassQ = calculateRoundedBandpassQForMaxFrequency(closedHiHatBandpassFrequency)
   const closedHiHatPanLeft = -0.4 // TODO: is -0.4 correct?
   const closedHiHatPanRight = Math.abs(closedHiHatPanLeft)
 
   // TODO: WIP
+  const eightNotePlayDuration = noteTimings.eightNotePlayDuration
   const hiHatAttack = TWO_MS_IN_SECONDS
-  const hiHatTransientEndAt = hiHatAttack + 0.001 // TODO: use roundToThreeDecimals?
-  const swungHiHatAttack = addTwoMs(noteTimings.swingAmount) // TODO: use roundToThreeDecimals?
+  const hiHatTransientEndAt = addOneMs(hiHatAttack)
+  const swungHiHatAttack = addTwoMs(noteTimings.swingAmount)
+  const swungHiHatTransientEndAt = addOneMs(swungHiHatAttack)
+  const openHiHatSustain = calculatePercussionSustain(eightNotePlayDuration)
 
   const [bassDrum, openHiHat, closedHiHatLeft, closedHiHatRight, swungClosedHiHatLeft, swungClosedHiHatRight] =
     await Promise.all([
-      createBassDrumBuffer(context, 0, noteTimings.eightNotePlayDuration),
+      createBassDrumBuffer(context, 0, eightNotePlayDuration),
       createHiHatBuffer(
         context,
         whiteNoiseBuffer,
         0,
-        noteTimings.eightNotePlayDuration,
+        eightNotePlayDuration,
         hiHatOscillatorFrequencies,
         hiHatOscillatorsGain,
         hiHatWhiteNoiseGain,
         openHiHatTransientGain,
         calculateSustainGain(openHiHatTransientGain),
         openHiHatBandpassFrequency,
-        roundToThreeDecimals(calculateBandpassQForMaxFrequency(openHiHatBandpassFrequency)),
+        calculateRoundedBandpassQForMaxFrequency(openHiHatBandpassFrequency),
         0
       ),
       createHiHatBuffer(
@@ -119,6 +123,10 @@ export async function audioThings(context, bpm) {
   }
 }
 
+function calculateRoundedBandpassQForMaxFrequency(centerFrequency) {
+  return roundToThreeDecimals(calculateBandpassQForMaxFrequency(centerFrequency))
+}
+
 function calculateBandpassQForMaxFrequency(centerFrequency) {
   return calculateBandpassQ(centerFrequency, MAX_FREQUENCY)
 }
@@ -195,16 +203,12 @@ function createNoteFrequencies() {
   return noteFrequencies
 }
 
-function roundToOneDecimal(value) {
-  return Math.round(value * 10) / 10 // Prevent floating-point artifacts
-}
-
 function roundToThreeDecimals(value) {
-  return Math.round(value * 1000) / 1000 // Prevent floating-point artifacts
+  return Math.round(value * 1000) / 1000
 }
 
 function calculateSustainGain(value) {
-  return roundToOneDecimal(value - 0.1)
+  return value - 0.1
 }
 
 function calculatePercussionSustain(noteTiming) {
@@ -246,8 +250,12 @@ function createLowOrHighPassFilter(type, frequency) {
   return filter
 }
 
+function addOneMs(s) {
+  return s + ONE_MS_IN_SECONDS
+}
+
 function addTwoMs(s) {
-  return s + TWO_MS_IN_SECONDS // TODO: use roundToThreeDecimals?
+  return s + TWO_MS_IN_SECONDS
 }
 
 //
@@ -263,8 +271,8 @@ function createBassDrumBuffer(context, startAt, duration, transientFrequency, ba
   oscillator.connect(gain)
   gain.connect(offlineContext.destination)
 
-  const attack = startAt + 0.003 // TODO: use roundToThreeDecimals?
-  const transientEndAt = addTwoMs(attack) // TODO: use roundToThreeDecimals?
+  const attack = startAt + 0.003
+  const transientEndAt = addTwoMs(attack)
   const sustainGain = calculateSustainGain(transientGain)
 
   oscillator.type = 'sine'
