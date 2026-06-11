@@ -2,17 +2,25 @@ const GAIN_EPSILON = 0.0001
 const MIN_FREQUENCY = 35
 const MAX_FREQUENCY = 20000
 const MIN_TREBLE_FREQUENCY = 6000
+const MAX_GAIN = 1
 const ONE_MS_IN_SECONDS = 0.001
 const TWO_MS_IN_SECONDS = 0.002
 
-export async function audioThings(context, bpm) {
+export async function createAudioAssets(context, bpm) {
+  const noteFrequencies = createNoteFrequencies()
   const noteTimings = createNoteTimings(bpm)
-  const whiteNoiseBuffer = createWhiteNoiseBuffer(context)
-  const hiHatBufferPromises = createHiHatBufferPromises(context, whiteNoiseBuffer, noteTimings)
+  const hiHatBufferPromises = createHiHatBufferPromises(context, createWhiteNoiseBuffer(context), noteTimings)
 
   const [bassDrum, openHiHat, closedHiHatLeft, closedHiHatRight, swungClosedHiHatLeft, swungClosedHiHatRight] =
     await Promise.all([
-      createBassDrumBuffer(context, 0, noteTimings.eightNotePlayDuration),
+      createBassDrumBuffer(
+        context,
+        0,
+        noteTimings.eightNotePlayDuration,
+        noteFrequencies.Ds10,
+        noteFrequencies.B3,
+        MAX_GAIN
+      ),
       hiHatBufferPromises.openHiHatBufferPromise,
       hiHatBufferPromises.closedHiHatLeftBufferPromise,
       hiHatBufferPromises.closedHiHatRightBufferPromise,
@@ -22,12 +30,14 @@ export async function audioThings(context, bpm) {
 
   return {
     noteTimings,
-    noteFrequencies: createNoteFrequencies(),
-    gainEpsilon: GAIN_EPSILON,
-    minFrequency: MIN_FREQUENCY,
-    maxFrequency: MAX_FREQUENCY,
-    minTrebleFrequency: MIN_TREBLE_FREQUENCY,
-    whiteNoiseBuffer,
+    noteFrequencies,
+    constants: {
+      gainEpsilon: GAIN_EPSILON,
+      minFrequency: MIN_FREQUENCY,
+      maxFrequency: MAX_FREQUENCY,
+      maxGain: MAX_GAIN,
+      minTrebleFrequency: MIN_TREBLE_FREQUENCY
+    },
     percussionBuffers: {
       bassDrum,
       openHiHat,
@@ -40,27 +50,35 @@ export async function audioThings(context, bpm) {
 }
 
 function createHiHatBufferPromises(context, whiteNoiseBuffer, noteTimings) {
-  const hiHatOscillatorFrequencies = [6007, 8009, 10007] /* prime numbers */
+  const openHiHatBandpassFrequency = 9001 /* prime number */
   const hiHatOscillatorsGain = 0.1
-  const hiHatWhiteNoiseGain = roundToThreeDecimals(1 - hiHatOscillatorsGain * hiHatOscillatorFrequencies.length)
-  const openHiHatBandpassFrequency = 9000
-  const openHiHatTransientGain = 1
-  const closedHiHatBandpassFrequency = 11000
+  const openHiHatOscillatorFrequencies = [
+    MIN_TREBLE_FREQUENCY,
+    calculateMiddleFrequency(MIN_TREBLE_FREQUENCY, openHiHatBandpassFrequency),
+    openHiHatBandpassFrequency
+  ]
+  const hiHatWhiteNoiseGain = roundToThreeDecimals(1 - hiHatOscillatorsGain * openHiHatOscillatorFrequencies.length)
+
+  const openHiHatTransientGain = MAX_GAIN
+  const closedHiHatBandpassFrequency = 11003 /* prime number */
   const closedHiHatTransientGain = 0.9
   const closedHiHatSustainGain = calculateSustainGain(closedHiHatTransientGain)
   const closedHiHatBandpassQ = calculateRoundedBandpassQForMaxFrequency(closedHiHatBandpassFrequency)
+  const closedHiHatOscillatorFrequencies = [
+    MIN_TREBLE_FREQUENCY,
+    calculateMiddleFrequency(MIN_TREBLE_FREQUENCY, closedHiHatBandpassFrequency),
+    closedHiHatBandpassFrequency
+  ]
   const closedHiHatPanLeft = -0.4 // TODO: is -0.4 correct?
   const closedHiHatPanRight = Math.abs(closedHiHatPanLeft)
 
-  // TODO: WIP
   const {sixteenthNotePlayDuration, swungSixteenthNotePlayDuration} = noteTimings
-  const hiHatAttack = TWO_MS_IN_SECONDS
-  const hiHatTransientEndAt = addOneMs(hiHatAttack)
-  const swungHiHatAttack = addTwoMs(noteTimings.swingAmount)
-  const swungHiHatTransientEndAt = addOneMs(swungHiHatAttack)
-  const openHiHatSustain = calculatePercussionSustain(noteTimings.eightNotePlayDuration)
-  const closedHiHatSustain = calculatePercussionSustain(sixteenthNotePlayDuration)
-  const swungClosedHiHatSustain = calculatePercussionSustain(swungSixteenthNotePlayDuration)
+  const hiHatAttackEndAt = TWO_MS_IN_SECONDS
+  const hiHatDecayEndAt = addOneMs(hiHatAttackEndAt)
+  const swungHiHatAttackEndAt = addTwoMs(noteTimings.swingAmount)
+  const swungHiHatDecayEndAt = addOneMs(swungHiHatAttackEndAt)
+  const closedHiHatSustainEndAt = calculatePercussionSustain(sixteenthNotePlayDuration)
+  const swungClosedHiHatSustainEndAt = calculatePercussionSustain(swungSixteenthNotePlayDuration)
 
   return {
     openHiHatBufferPromise: createHiHatBuffer(
@@ -68,13 +86,16 @@ function createHiHatBufferPromises(context, whiteNoiseBuffer, noteTimings) {
       whiteNoiseBuffer,
       0,
       noteTimings.eightNotePlayDuration,
-      hiHatOscillatorFrequencies,
+      openHiHatOscillatorFrequencies,
       hiHatOscillatorsGain,
       hiHatWhiteNoiseGain,
       openHiHatTransientGain,
       calculateSustainGain(openHiHatTransientGain),
       openHiHatBandpassFrequency,
       calculateRoundedBandpassQForMaxFrequency(openHiHatBandpassFrequency),
+      hiHatAttackEndAt,
+      hiHatDecayEndAt,
+      calculatePercussionSustain(noteTimings.eightNotePlayDuration),
       0
     ),
     closedHiHatLeftBufferPromise: createHiHatBuffer(
@@ -82,13 +103,16 @@ function createHiHatBufferPromises(context, whiteNoiseBuffer, noteTimings) {
       whiteNoiseBuffer,
       0,
       sixteenthNotePlayDuration,
-      hiHatOscillatorFrequencies,
+      closedHiHatOscillatorFrequencies,
       hiHatOscillatorsGain,
       hiHatWhiteNoiseGain,
       closedHiHatTransientGain,
       closedHiHatSustainGain,
       closedHiHatBandpassFrequency,
       closedHiHatBandpassQ,
+      hiHatAttackEndAt,
+      hiHatDecayEndAt,
+      closedHiHatSustainEndAt,
       closedHiHatPanLeft
     ),
     closedHiHatRightBufferPromise: createHiHatBuffer(
@@ -96,13 +120,16 @@ function createHiHatBufferPromises(context, whiteNoiseBuffer, noteTimings) {
       whiteNoiseBuffer,
       0,
       sixteenthNotePlayDuration,
-      hiHatOscillatorFrequencies,
+      closedHiHatOscillatorFrequencies,
       hiHatOscillatorsGain,
       hiHatWhiteNoiseGain,
       closedHiHatTransientGain,
       closedHiHatSustainGain,
       closedHiHatBandpassFrequency,
       closedHiHatBandpassQ,
+      hiHatAttackEndAt,
+      hiHatDecayEndAt,
+      closedHiHatSustainEndAt,
       closedHiHatPanRight
     ),
     swungClosedHiHatLeftBufferPromise: createHiHatBuffer(
@@ -110,13 +137,16 @@ function createHiHatBufferPromises(context, whiteNoiseBuffer, noteTimings) {
       whiteNoiseBuffer,
       noteTimings.swingAmount,
       swungSixteenthNotePlayDuration,
-      hiHatOscillatorFrequencies,
+      closedHiHatOscillatorFrequencies,
       hiHatOscillatorsGain,
       hiHatWhiteNoiseGain,
       closedHiHatTransientGain,
       closedHiHatSustainGain,
       closedHiHatBandpassFrequency,
       closedHiHatBandpassQ,
+      swungHiHatAttackEndAt,
+      swungHiHatDecayEndAt,
+      swungClosedHiHatSustainEndAt,
       closedHiHatPanLeft
     ),
     swungClosedHiHatRightBufferPromise: createHiHatBuffer(
@@ -124,13 +154,16 @@ function createHiHatBufferPromises(context, whiteNoiseBuffer, noteTimings) {
       whiteNoiseBuffer,
       noteTimings.swingAmount,
       swungSixteenthNotePlayDuration,
-      hiHatOscillatorFrequencies,
+      closedHiHatOscillatorFrequencies,
       hiHatOscillatorsGain,
       hiHatWhiteNoiseGain,
       closedHiHatTransientGain,
       closedHiHatSustainGain,
       closedHiHatBandpassFrequency,
       closedHiHatBandpassQ,
+      swungHiHatAttackEndAt,
+      swungHiHatDecayEndAt,
+      swungClosedHiHatSustainEndAt,
       closedHiHatPanRight
     )
   }
@@ -146,6 +179,10 @@ function calculateBandpassQForMaxFrequency(centerFrequency) {
 
 function calculateBandpassQ(centerFrequency, upperFrequency) {
   return centerFrequency / (2 * (upperFrequency - centerFrequency))
+}
+
+function calculateMiddleFrequency(lowerFrequency, upperFrequency) {
+  return (lowerFrequency + upperFrequency) / 2
 }
 
 function createWhiteNoiseBuffer(context) {
@@ -284,19 +321,19 @@ function createBassDrumBuffer(context, startAt, duration, transientFrequency, ba
   oscillator.connect(gain)
   gain.connect(offlineContext.destination)
 
-  const attack = startAt + 0.003
-  const transientEndAt = addTwoMs(attack)
+  const attackEndAt = startAt + 0.003
+  const decayEndAt = addTwoMs(attackEndAt)
   const sustainGain = calculateSustainGain(transientGain)
 
   oscillator.type = 'sine'
 
   oscillator.frequency.setValueAtTime(transientFrequency, startAt)
-  oscillator.frequency.linearRampToValueAtTime(bassFrequency, transientEndAt)
+  oscillator.frequency.linearRampToValueAtTime(bassFrequency, decayEndAt)
   oscillator.frequency.exponentialRampToValueAtTime(MIN_FREQUENCY, duration)
 
   gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
-  gain.gain.linearRampToValueAtTime(transientGain, attack)
-  gain.gain.linearRampToValueAtTime(sustainGain, transientEndAt)
+  gain.gain.linearRampToValueAtTime(transientGain, attackEndAt)
+  gain.gain.linearRampToValueAtTime(sustainGain, decayEndAt)
   gain.gain.setValueAtTime(sustainGain, startAt + calculatePercussionSustain(duration))
   gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, duration)
 
@@ -318,6 +355,9 @@ function createHiHatBuffer(
   sustainGain,
   bandpassFrequency,
   bandpassQ,
+  attackEndAt,
+  decayEndAt,
+  sustainEndAt,
   pan
 ) {
   const offlineContext = createOfflineAudioContext(context, startAt, duration)
@@ -335,6 +375,19 @@ function createHiHatBuffer(
 
   const whiteNoiseGain = offlineContext.createGain()
   whiteNoiseGain.gain.value = whiteNoiseGainValue
+
+  const gain = context.createGain()
+  gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
+  gain.gain.linearRampToValueAtTime(transientGain, attackEndAt)
+  gain.gain.linearRampToValueAtTime(sustainGain, decayEndAt)
+  gain.gain.setValueAtTime(sustainGain, sustainEndAt)
+  gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, duration)
+
+  const oscillatorsGain = context.createGain()
+  oscillatorsGain.gain.value = oscillatorsGainValue
+
+  for (const frequency of oscillatorFrequencies) {
+  }
 
   return offlineContext.startRendering()
 }
