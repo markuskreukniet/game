@@ -269,9 +269,9 @@ function createOfflineAudioContext(context, startAt, duration) {
   return new OfflineAudioContext(1, (startAt + duration) * context.sampleRate, context.sampleRate)
 }
 
-function connect48DbOctTrebleFilter(inputNode) {
+function connect48DbOctTrebleFilter(context, inputNode) {
   for (let i = 0; i < 4; i++) {
-    const filter = createTrebleFilter()
+    const filter = createTrebleFilter(context)
     inputNode.connect(filter)
     inputNode = filter
   }
@@ -279,19 +279,19 @@ function connect48DbOctTrebleFilter(inputNode) {
   return inputNode
 }
 
-function createTrebleFilter() {
-  return createHighPassFilter(MIN_TREBLE_FREQUENCY)
+function createTrebleFilter(context) {
+  return createHighPassFilter(context, MIN_TREBLE_FREQUENCY)
 }
 
-function createLowPassFilter(frequency) {
-  return createLowOrHighPassFilter('lowpass', frequency)
+function createLowPassFilter(context, frequency) {
+  return createLowOrHighPassFilter(context, 'lowpass', frequency)
 }
 
-function createHighPassFilter(frequency) {
-  return createLowOrHighPassFilter('highpass', frequency)
+function createHighPassFilter(context, frequency) {
+  return createLowOrHighPassFilter(context, 'highpass', frequency)
 }
 
-function createLowOrHighPassFilter(type, frequency) {
+function createLowOrHighPassFilter(context, type, frequency) {
   const filter = context.createBiquadFilter()
   filter.type = type
   filter.frequency.value = frequency
@@ -335,7 +335,7 @@ function createBassDrumBuffer(context, startAt, duration, transientFrequency, ba
   gain.gain.linearRampToValueAtTime(transientGain, attackEndAt)
   gain.gain.linearRampToValueAtTime(sustainGain, decayEndAt)
   gain.gain.setValueAtTime(sustainGain, startAt + calculatePercussionSustain(duration))
-  gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, duration)
+  gain.gain.linearRampToValueAtTime(GAIN_EPSILON, duration)
 
   oscillator.start(startAt)
   oscillator.stop(duration)
@@ -376,18 +376,37 @@ function createHiHatBuffer(
   const whiteNoiseGain = offlineContext.createGain()
   whiteNoiseGain.gain.value = whiteNoiseGainValue
 
-  const gain = context.createGain()
+  const gain = offlineContext.createGain()
   gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
   gain.gain.linearRampToValueAtTime(transientGain, attackEndAt)
   gain.gain.linearRampToValueAtTime(sustainGain, decayEndAt)
   gain.gain.setValueAtTime(sustainGain, sustainEndAt)
-  gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, duration)
+  gain.gain.linearRampToValueAtTime(GAIN_EPSILON, duration)
 
-  const oscillatorsGain = context.createGain()
+  const oscillatorsGain = offlineContext.createGain()
   oscillatorsGain.gain.value = oscillatorsGainValue
 
   for (const frequency of oscillatorFrequencies) {
+    const oscillator = offlineContext.createOscillator()
+
+    oscillator.type = 'square'
+    oscillator.frequency.value = frequency
+    oscillator.connect(oscillatorsGain)
+    oscillator.start(startAt)
+    oscillator.stop(duration)
   }
+
+  bufferSource.connect(whiteNoiseGain)
+
+  whiteNoiseGain.connect(bandpass)
+  oscillatorsGain.connect(bandpass)
+
+  connect48DbOctTrebleFilter(offlineContext, bandpass).connect(gain)
+  gain.connect(panner)
+  panner.connect(offlineContext.destination)
+
+  bufferSource.start(startAt)
+  bufferSource.stop(duration)
 
   return offlineContext.startRendering()
 }
