@@ -7,8 +7,7 @@ export async function createAudio() {
 
   const audioAssets = await createAudioAssets(context, BPM)
   const {noteFrequencies, noteTimings, percussionBuffers} = audioAssets
-
-  const GAIN_EPSILON = 0.0001
+  const gainEpsilon = audioAssets.constants.gainEpsilon
 
   // TODO: naming
   const CHORD_PROGRESSION = [
@@ -335,10 +334,10 @@ export async function createAudio() {
       oscillator.stop(stopAt)
     }
 
-    gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
+    gain.gain.setValueAtTime(gainEpsilon, startAt)
     gain.gain.linearRampToValueAtTime(volume, attackEndAt)
     gain.gain.setValueAtTime(volume, releaseStartAt)
-    gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, stopAt)
+    gain.gain.exponentialRampToValueAtTime(gainEpsilon, stopAt)
 
     chainFilters(oscillatorMix, 'lowpass', cutoffHz, filterStageCount).connect(gain)
 
@@ -426,7 +425,7 @@ export async function createAudio() {
       if (i % 4 !== 2 || i < 2) {
         let buffer = percussionBuffers.closedHiHatLeft
         if (i % 2 === 0) {
-          buffer = percussionBuffers.closedHiHatRight
+          buffer = percussionBuffers.swungClosedHiHatRight
         }
 
         playBuffer(buffer, startAt)
