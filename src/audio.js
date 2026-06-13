@@ -10,16 +10,6 @@ export async function createAudio() {
 
   const GAIN_EPSILON = 0.0001
 
-  const BEAT = 60 / BPM // QUARTER_NOTE
-  const EIGHTH_NOTE = BEAT / 2
-  const SIXTEENTH_NOTE = BEAT / 4
-  const NOTE_128 = BEAT / 32
-  const NOTE_256 = BEAT / 64
-  const SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_256
-  const SWUNG_SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_128 - NOTE_256
-
-  const WHITE_NOISE_BUFFER = createWhiteNoiseBuffer()
-
   // TODO: naming
   const CHORD_PROGRESSION = [
     ['E3', 'G3', 'B3'],
@@ -37,18 +27,6 @@ export async function createAudio() {
 
   reverbReturn.gain.value = 0.6
   reverbReturn.connect(masterGain)
-
-  function createWhiteNoiseBuffer() {
-    const sampleRate = context.sampleRate
-    const buffer = context.createBuffer(1, sampleRate, sampleRate)
-    const data = buffer.getChannelData(0)
-
-    for (let i = 0; i < sampleRate; i++) {
-      data[i] = Math.random() * 2 - 1
-    }
-
-    return buffer
-  }
 
   function createDiffuser(delayS, gain) {
     const input = context.createGain()
@@ -414,7 +392,7 @@ export async function createAudio() {
 
     for (let i = 0; i < hitCount; i++) {
       playBuffer(percussionBuffers.bassDrum, startAt)
-      startAt += BEAT
+      startAt += noteTimings.quarterNote
     }
   }
 
@@ -430,119 +408,30 @@ export async function createAudio() {
     }
   }
 
-  // TODO: only check if EIGHTH_NOTE and EIGHTH_NOTE_PLAY_DURATION is correct. TODO: it should be stereo with haas?
+  // TODO: it should be stereo with haas?
   function playOffbeatHiHats(hitCount) {
-    let startAt = context.currentTime + EIGHTH_NOTE
+    let startAt = context.currentTime + noteTimings.eighthNote
 
     for (let i = 0; i < hitCount; i++) {
       playBuffer(percussionBuffers.openHiHat, startAt)
-      startAt += BEAT
+      startAt += noteTimings.quarterNote
     }
   }
 
   function playSyncopatedHiHats(hitCount) {
     let startAt = context.currentTime
-    const sustain = (SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7
-    const diff = (SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7 - (SWUNG_SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7 // TODO: naming
 
     // TODO: is it efficient?
     for (let i = 0; i < hitCount; i++) {
       if (i % 4 !== 2 || i < 2) {
-        let pan = -0.4 // TODO: is 0.4 correct?
-        let swungStartAt = startAt
-        let swungReleaseAt = startAt + sustain
+        let buffer = percussionBuffers.closedHiHatLeft
         if (i % 2 === 0) {
-          pan = Math.abs(pan)
-          swungStartAt += NOTE_128
-          swungReleaseAt -= diff
+          buffer = percussionBuffers.closedHiHatRight
         }
 
-        playHiHat(
-          swungStartAt,
-          startAt + SIXTEENTH_NOTE_PLAY_DURATION,
-          swungReleaseAt,
-          9000,
-          0.4,
-          0.7,
-          0.1,
-          0.9,
-          0.8,
-          pan
-        )
+        playBuffer(buffer, startAt)
       }
-      startAt += SIXTEENTH_NOTE
-    }
-  }
-
-  function playHiHat(
-    startAt,
-    endAt,
-    releaseAt,
-    bandpassFrequency,
-    bandpassQ,
-    whiteNoiseGainValue,
-    oscillatorsGainValue,
-    transientGain,
-    sustainGain,
-    pan
-  ) {
-    const bufferSource = context.createBufferSource()
-    bufferSource.buffer = WHITE_NOISE_BUFFER
-
-    const highpass = context.createBiquadFilter() // TODO: duplicate
-    highpass.type = 'highpass'
-    highpass.frequency.value = 6000
-
-    const bandpass = context.createBiquadFilter()
-    bandpass.type = 'bandpass'
-    bandpass.frequency.value = bandpassFrequency
-    bandpass.Q.value = bandpassQ
-
-    const panner = context.createStereoPanner()
-    panner.pan.value = pan
-
-    const whiteNoiseGain = context.createGain()
-    whiteNoiseGain.gain.value = whiteNoiseGainValue
-
-    const gain = context.createGain()
-    gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
-    gain.gain.linearRampToValueAtTime(transientGain, startAt + 0.003) // TODO: duplicate
-    gain.gain.linearRampToValueAtTime(sustainGain, startAt + 0.006) // TODO: duplicate
-    gain.gain.setValueAtTime(sustainGain, releaseAt) // TODO: duplicate
-    gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, endAt)
-
-    const oscillatorsGain = context.createGain()
-    oscillatorsGain.gain.value = oscillatorsGainValue
-
-    for (const frequency of [6007, 8009, 10007]) /* prime numbers */ {
-      const oscillator = context.createOscillator()
-
-      oscillator.type = 'square'
-      oscillator.frequency.value = frequency
-      oscillator.connect(oscillatorsGain)
-      oscillator.start(startAt)
-      oscillator.stop(endAt)
-
-      oscillator.onended = () => oscillator.disconnect()
-    }
-
-    bufferSource.connect(whiteNoiseGain)
-    whiteNoiseGain.connect(highpass)
-    oscillatorsGain.connect(highpass)
-    highpass.connect(bandpass)
-    bandpass.connect(gain)
-    gain.connect(panner)
-    panner.connect(masterGain)
-
-    bufferSource.start(startAt)
-    bufferSource.stop(endAt)
-
-    bufferSource.onended = () => {
-      bufferSource.disconnect()
-      highpass.disconnect()
-      bandpass.disconnect()
-      gain.disconnect()
-      panner.disconnect()
+      startAt += noteTimings.sixteenthNote
     }
   }
 
@@ -550,13 +439,13 @@ export async function createAudio() {
     ensureRunning()
 
     const attack = 0.01
-    const sustain = SIXTEENTH_NOTE_PLAY_DURATION - attack
+    const sustain = noteTimings.sixteenthNotePlayDuration - attack
     const now = context.currentTime
     let offset = 0
 
     for (const frequency of [noteFrequencies.C5, noteFrequencies.E5, noteFrequencies.G5, noteFrequencies.C6]) {
       playTone({frequency, sustain, type: 'square', volume: 0.6, startAt: now + offset, attack, release: 0.05})
-      offset += SIXTEENTH_NOTE + NOTE_256
+      offset += noteTimings.sixteenthNote
     }
   }
 
