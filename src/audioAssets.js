@@ -1,10 +1,23 @@
 const GAIN_EPSILON = 0.0001
 const MIN_FREQUENCY = 35
 const MAX_FREQUENCY = 20000
+const MAX_SUB_BASS_FREQUENCY = 60
 const MIN_TREBLE_FREQUENCY = 6000
 const MAX_GAIN = 1
+
 const ONE_MS_IN_SECONDS = 0.001
 const TWO_MS_IN_SECONDS = 0.002
+
+const NOTE_NAMES = ['C', 'Cs', 'D', 'Ds', 'E', 'F', 'Fs', 'G', 'Gs', 'A', 'As', 'B']
+
+// TODO: is good naming, but does not have to be in this scope
+const SCALE_INTERVALS = {
+  major: [0, 2, 4, 5, 7, 9, 11], // Ionian
+  naturalMinor: [0, 2, 3, 5, 7, 8, 10], // Aeolian
+  harmonicMinor: [0, 2, 3, 5, 7, 8, 11],
+  melodicMinor: [0, 2, 3, 5, 7, 9, 11],
+  phrygian: [0, 1, 3, 5, 7, 8, 10]
+}
 
 export async function createAudioAssets(context, bpm) {
   const noteFrequencies = createNoteFrequencies()
@@ -197,6 +210,12 @@ function createWhiteNoiseBuffer(context) {
   return buffer
 }
 
+function createScaleNotes(rootNote, scale) {
+  const rootNoteIndex = NOTE_NAMES.indexOf(rootNote)
+
+  return SCALE_INTERVALS[scale].map(interval => NOTE_NAMES[(rootNoteIndex + interval) % NOTE_NAMES.length])
+}
+
 function createNoteTimings(bpm) {
   const beat = 60 / bpm // quarterNote
   const wholeNote = beat * 4
@@ -238,15 +257,14 @@ function createNoteTimings(bpm) {
 }
 
 function createNoteFrequencies() {
-  const noteNames = ['C', 'Cs', 'D', 'Ds', 'E', 'F', 'Fs', 'G', 'Gs', 'A', 'As', 'B']
   const noteFrequencies = {}
 
   for (let octave = 0; octave <= 10; octave++) {
-    for (let semitone = 0; semitone < noteNames.length; semitone++) {
+    for (let semitone = 0; semitone < NOTE_NAMES.length; semitone++) {
       const midiNote = octave * 12 + semitone + 12
       const frequency = 440 * 2 ** ((midiNote - 69) / 12)
 
-      noteFrequencies[`${noteNames[semitone]}${octave}`] = Math.round(frequency * 100) / 100
+      noteFrequencies[`${NOTE_NAMES[semitone]}${octave}`] = Math.round(frequency * 100) / 100
     }
   }
 
