@@ -6,22 +6,15 @@ export async function createAudio() {
   const BPM = 120
 
   const audioAssets = await createAudioAssets(context, BPM)
-  const {noteFrequencies, percussionBuffers} = audioAssets
+  const {noteFrequencies, noteTimings, percussionBuffers} = audioAssets
 
   const GAIN_EPSILON = 0.0001
 
   const BEAT = 60 / BPM // QUARTER_NOTE
-  const WHOLE_NOTE = BEAT * 4
-  const HALF_NOTE = BEAT * 2
   const EIGHTH_NOTE = BEAT / 2
   const SIXTEENTH_NOTE = BEAT / 4
-  const THIRTY_SECOND_NOTE = BEAT / 8
-  const SIXTY_FOURTH_NOTE = BEAT / 16
   const NOTE_128 = BEAT / 32
   const NOTE_256 = BEAT / 64
-  const WHOLE_NOTE_PLAY_DURATION = WHOLE_NOTE - NOTE_256
-  const HALF_NOTE_PLAY_DURATION = HALF_NOTE - NOTE_256
-  const EIGHTH_NOTE_PLAY_DURATION = EIGHTH_NOTE - NOTE_256
   const SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_256
   const SWUNG_SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_128 - NOTE_256
 
@@ -299,13 +292,13 @@ export async function createAudio() {
     ensureRunning()
 
     const attack = 0.02
-    const sustain = WHOLE_NOTE_PLAY_DURATION - attack
+    const sustain = noteTimings.wholeNotePlayDuration - attack
     const now = context.currentTime
     let offset = 0
 
     for (const chord of CHORD_PROGRESSION) {
       playChord(chord, now + offset, attack, sustain)
-      offset += WHOLE_NOTE
+      offset += noteTimings.wholeNote
     }
   }
 
@@ -420,15 +413,15 @@ export async function createAudio() {
     let startAt = context.currentTime
 
     for (let i = 0; i < hitCount; i++) {
-      playBassDrum(startAt)
+      playBuffer(percussionBuffers.bassDrum, startAt)
       startAt += BEAT
     }
   }
 
-  function playBassDrum(startAt) {
+  function playBuffer(buffer, startAt) {
     const bufferSource = context.createBufferSource()
 
-    bufferSource.buffer = percussionBuffers.bassDrum
+    bufferSource.buffer = buffer
     bufferSource.connect(masterGain)
     bufferSource.start(startAt)
 
@@ -440,17 +433,16 @@ export async function createAudio() {
   // TODO: only check if EIGHTH_NOTE and EIGHTH_NOTE_PLAY_DURATION is correct. TODO: it should be stereo with haas?
   function playOffbeatHiHats(hitCount) {
     let startAt = context.currentTime + EIGHTH_NOTE
-    const sustain = (EIGHTH_NOTE_PLAY_DURATION / 8) * 7 // TODO: duplicate. TODO is correct?
 
     for (let i = 0; i < hitCount; i++) {
-      playHiHat(startAt, startAt + EIGHTH_NOTE_PLAY_DURATION, startAt + sustain, 11000, 0.6, 0.598, 0.134, 1, 0.9, 0)
+      playBuffer(percussionBuffers.openHiHat, startAt)
       startAt += BEAT
     }
   }
 
   function playSyncopatedHiHats(hitCount) {
     let startAt = context.currentTime
-    const sustain = (SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7 // TODO: duplicate <<< hats is eigenlijk * 6, kick iets meer
+    const sustain = (SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7
     const diff = (SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7 - (SWUNG_SIXTEENTH_NOTE_PLAY_DURATION / 8) * 7 // TODO: naming
 
     // TODO: is it efficient?
