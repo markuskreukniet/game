@@ -1,26 +1,15 @@
-function createNoteFrequencies() {
-  const noteNames = ['C', 'Cs', 'D', 'Ds', 'E', 'F', 'Fs', 'G', 'Gs', 'A', 'As', 'B']
-  const noteFrequencies = {}
+import {createAudioAssets} from './audioAssets.js'
 
-  for (let octave = 0; octave <= 10; octave++) {
-    for (let semitone = 0; semitone < noteNames.length; semitone++) {
-      const midiNote = octave * 12 + semitone + 12
-      const frequency = 440 * 2 ** ((midiNote - 69) / 12)
-
-      noteFrequencies[`${noteNames[semitone]}${octave}`] = Math.round(frequency * 100) / 100
-    }
-  }
-
-  return noteFrequencies
-}
-
-export function createAudio() {
+export async function createAudio() {
   // TODO: this should only happen after user input, now it also happens before < results in warning
   const context = new AudioContext()
+  const BPM = 120
+
+  const audioAssets = await createAudioAssets(context, BPM)
+  const {noteFrequencies, percussionBuffers} = audioAssets
 
   const GAIN_EPSILON = 0.0001
 
-  const BPM = 120
   const BEAT = 60 / BPM // QUARTER_NOTE
   const WHOLE_NOTE = BEAT * 4
   const HALF_NOTE = BEAT * 2
@@ -34,13 +23,11 @@ export function createAudio() {
   const HALF_NOTE_PLAY_DURATION = HALF_NOTE - NOTE_256
   const EIGHTH_NOTE_PLAY_DURATION = EIGHTH_NOTE - NOTE_256
   const SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_256
-  const SWUNG_SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_128 - NOTE_256 // TODO: is - NOTE_128 correct?
-
-  const NOTE_FREQUENCIES = createNoteFrequencies()
+  const SWUNG_SIXTEENTH_NOTE_PLAY_DURATION = SIXTEENTH_NOTE - NOTE_128 - NOTE_256
 
   const WHITE_NOISE_BUFFER = createWhiteNoiseBuffer()
 
-  // TODO: naming in combination with noteNames inside createNoteFrequencies
+  // TODO: naming
   const CHORD_PROGRESSION = [
     ['E3', 'G3', 'B3'],
     ['C3', 'E3', 'G3'],
@@ -293,7 +280,7 @@ export function createAudio() {
 
     for (const noteName of noteNames) {
       playTone({
-        frequency: NOTE_FREQUENCIES[noteName],
+        frequency: noteFrequencies[noteName],
         sustain,
         type: 'sawtooth',
         volume,
@@ -431,42 +418,22 @@ export function createAudio() {
 
   function playQuarterNoteBassDrums(hitCount) {
     let startAt = context.currentTime
-    const sustain = (EIGHTH_NOTE_PLAY_DURATION / 8) * 7
 
     for (let i = 0; i < hitCount; i++) {
-      playBassDrum(startAt, startAt + EIGHTH_NOTE_PLAY_DURATION, startAt + sustain)
+      playBassDrum(startAt)
       startAt += BEAT
     }
   }
 
-  function playBassDrum(startAt, endAt, releaseAt) {
-    const oscillator = context.createOscillator()
-    const gain = context.createGain()
+  function playBassDrum(startAt) {
+    const bufferSource = context.createBufferSource()
 
-    oscillator.connect(gain)
-    gain.connect(masterGain)
+    bufferSource.buffer = percussionBuffers.bassDrum
+    bufferSource.connect(masterGain)
+    bufferSource.start(startAt)
 
-    oscillator.type = 'sine'
-
-    const transientEndAt = startAt + 0.006
-
-    oscillator.frequency.setValueAtTime(NOTE_FREQUENCIES.Ds10, startAt)
-    oscillator.frequency.linearRampToValueAtTime(NOTE_FREQUENCIES.B3, transientEndAt)
-    oscillator.frequency.exponentialRampToValueAtTime(35, endAt) // TODO: is it 35?
-
-    gain.gain.setValueAtTime(GAIN_EPSILON, startAt)
-    gain.gain.linearRampToValueAtTime(1, startAt + 0.003)
-    gain.gain.linearRampToValueAtTime(0.9, transientEndAt)
-    gain.gain.setValueAtTime(0.9, releaseAt)
-    gain.gain.exponentialRampToValueAtTime(GAIN_EPSILON, endAt)
-
-    oscillator.start(startAt)
-    oscillator.stop(endAt)
-
-    // TODO: use it also on other places?
-    oscillator.onended = () => {
-      oscillator.disconnect()
-      gain.disconnect()
+    bufferSource.onended = () => {
+      bufferSource.disconnect()
     }
   }
 
@@ -595,7 +562,7 @@ export function createAudio() {
     const now = context.currentTime
     let offset = 0
 
-    for (const frequency of [NOTE_FREQUENCIES.C5, NOTE_FREQUENCIES.E5, NOTE_FREQUENCIES.G5, NOTE_FREQUENCIES.C6]) {
+    for (const frequency of [noteFrequencies.C5, noteFrequencies.E5, noteFrequencies.G5, noteFrequencies.C6]) {
       playTone({frequency, sustain, type: 'square', volume: 0.6, startAt: now + offset, attack, release: 0.05})
       offset += SIXTEENTH_NOTE + NOTE_256
     }

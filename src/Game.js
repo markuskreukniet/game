@@ -749,7 +749,7 @@ function createRenderSystem(renderer) {
   }
 }
 
-export default function game(parent) {
+export default async function game(parent) {
   const SECOND_IN_MS = 1000
 
   const targetFrameMs = SECOND_IN_MS / 30 // SECOND_IN_MS / targetFps
@@ -762,7 +762,7 @@ export default function game(parent) {
   const camera = {x: 0, y: 0}
 
   const world = createWorld()
-  const audio = createAudio()
+  const audio = await createAudio()
 
   const inputSystem = createInputSystem()
   const movingSolidSystem = createMovingSolidSystem()
